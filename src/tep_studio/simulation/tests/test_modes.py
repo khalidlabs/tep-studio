@@ -9,6 +9,7 @@ from tep_studio.ui.config import ScenarioConfig
 from tep_studio.ui.service import run_scenario
 
 _PCT_G = 39  # measurement index for product G concentration (mol%)
+_REACTOR_P = 6  # measurement index for reactor pressure (kPa)
 
 
 def test_mode_registry() -> None:
@@ -29,18 +30,37 @@ def test_mode_setpoints_presets() -> None:
     assert mode_setpoints("mode4").production_rate > mode_setpoints("mode1").production_rate
 
 
-def test_reset_accepts_all_modes_from_base_state() -> None:
+def test_reset_initial_states_per_mode() -> None:
+    """Base / 50-50 / 10-90 modes start from the base case; the 90/10 modes (3, 6) start
+    from the bundled operating-point state, already at high %G near 2800 kPa."""
     sim = TennesseeEastmanProcess()
     for mode in MODE_KEYS:
         meas, _ = sim.reset(mode=mode)
         assert np.all(np.isfinite(meas))
+    for mode in ("mode3", "mode6"):  # bundled 90/10 operating-point state
+        meas, _ = sim.reset(mode=mode)
+        assert meas[_PCT_G] > 80.0
+        assert 2700.0 < meas[_REACTOR_P] < 2900.0
+    meas1, _ = sim.reset(mode="mode1")  # base case ~50/50 composition
+    assert 40.0 < meas1[_PCT_G] < 70.0
     with pytest.raises(NotImplementedError):
         sim.reset(mode="mode7")
 
 
+def test_90_10_modes_hold_without_tripping() -> None:
+    """The 90/10 modes (3, 6) hold their operating point on a long run: they start from the
+    bundled state and the controller keeps %G high without a high-pressure trip."""
+    for mode in ("mode3", "mode6"):
+        run = run_scenario(ScenarioConfig(mode=mode, loop_type="closed", horizon=36.0, control_interval=0.01))
+        assert not run.terminated, f"{mode} tripped at t={run.final_time:.1f} h"
+        frame = run.to_frame()
+        assert frame["measurement.stripper_underflow_G_concentration"].iloc[-1] > 80.0
+        assert frame["measurement.reactor_pressure"].iloc[-1] < 2950.0
+
+
 def test_modes_steer_product_composition() -> None:
-    """Outcome check: a closed-loop run in a 90/10 mode drives product G up, a 10/90 mode
-    drives it down — well separated after enough run time."""
+    """Outcome check: the 90/10 mode holds product G high, the 10/90 mode steers it down —
+    well separated after enough run time."""
     horizon = 24.0
     g_high = run_scenario(ScenarioConfig(mode="mode3", loop_type="closed", horizon=horizon, control_interval=0.01)).to_frame()
     g_low = run_scenario(ScenarioConfig(mode="mode2", loop_type="closed", horizon=horizon, control_interval=0.01)).to_frame()

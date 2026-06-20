@@ -79,7 +79,7 @@ def _config_card() -> html.Div:
             _field("Horizon (h)", dcc.Input(id="horizon", type="number", value=12.0, min=0.1, step="any", className="tep-input", style=theme.INPUT)),
             _field("Fidelity", dcc.RadioItems(id="ci-preset", options=[{"label": " Explore (Δt=0.01 h)", "value": 0.01}, {"label": " Fidelity (Δt=0.0005 h)", "value": 0.0005}], value=0.01)),
             _field("Seed (optional)", dcc.Input(id="seed", type="number", step="any", placeholder="none", className="tep-input", style=theme.INPUT)),
-            _field("Controller", dcc.Checklist(id="ctrl-flags", options=[{"label": " composition", "value": "composition"}, {"label": " overrides", "value": "overrides"}, {"label": " %G feedback", "value": "pct_g_feedback"}], value=["composition"])),
+            _field("Controller", dcc.Checklist(id="ctrl-flags", options=[{"label": " composition", "value": "composition"}, {"label": " overrides", "value": "overrides"}, {"label": " %G feedback", "value": "pct_g_feedback"}], value=["composition", "overrides"])),
             html.Div(setpoint_inputs(), id="closed-controls", style={**theme.CARD, "display": "block"}),
             html.Div(mv_sliders(), id="open-controls", style={**theme.CARD, "display": "none"}),
             html.H4("Disturbances"),

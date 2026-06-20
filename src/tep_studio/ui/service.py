@@ -103,7 +103,13 @@ def setpoint_schedule_from(cfg: ScenarioConfig, base: ControllerSetpoints):
 
 
 def _open_loop_action_fn(cfg: ScenarioConfig) -> Callable[[float], np.ndarray]:
-    base = TEP_SCHEMA.vector("manipulated_variables", cfg.manual_mvs or {}, base=np.array(RICKER_MODE1.nominal.u0))
+    from tep_studio.simulation.modes import mode_initial_state
+
+    # Hold the mode's own steady valves (so open-loop starts balanced); modes that begin at
+    # the base case fall back to the nominal u0. An explicit manual_mvs overrides per valve.
+    state = mode_initial_state(cfg.mode)
+    base_mv = np.array(RICKER_MODE1.nominal.u0) if state is None else np.asarray(state[38:50], dtype=float)
+    base = TEP_SCHEMA.vector("manipulated_variables", cfg.manual_mvs or {}, base=base_mv)
     st = cfg.step_test
     if st is not None and st.kind == "mv":
         idx = TEP_SCHEMA.index("manipulated_variables", st.target)

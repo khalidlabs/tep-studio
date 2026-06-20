@@ -67,6 +67,16 @@ def test_pressure_override_caps_pressure_under_stress() -> None:
         # the override threshold was tuned. The default 1-substep RK4 (at this fine 0.0005 h
         # interval) is slightly less accurate near the instability and undershoots the peak.
         ctl = RickerMultiLoopController(setpoints=hi, enable_overrides=overrides)
+        # The controller rate-limits the production setpoint; seed the ramp at the demand so
+        # the high-throughput pressure stress is exercised within this short horizon (the
+        # gradual ramp would otherwise never reach it in 5 h).
+        original_reset = ctl.reset
+
+        def reset_then_demand(measurements, *, time: float = 0.0) -> None:
+            original_reset(measurements, time=time)
+            ctl._ramped_production = 32.0
+
+        ctl.reset = reset_then_demand
         return ClosedLoopSimulation(
             simulator=TennesseeEastmanProcess(solver_method="RK45"),
             controller=ctl,
