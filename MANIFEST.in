@@ -1,0 +1,8 @@
+# The native extension is compiled from temexd_mod/ at build time (see
+# src/tep_studio/simulation/_cffi_build.py), so the sdist must ship those C sources;
+# without them `pip install` from the sdist (no prebuilt wheel) cannot build.
+graft temexd_mod
+# Validation reference data (read by the validation suite from a source checkout).
+include example.doc
+# Trim build noise from the sdist.
+global-exclude *.so *.pyc __pycache__/*
