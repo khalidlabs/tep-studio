@@ -20,10 +20,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # linux x86_64 / macOS x86_64 / macOS arm64 / windows AMD64.
-        # Linux aarch64 (ubuntu-24.04-arm) is omitted for now — those users install from
-        # the sdist; re-add it once its manylinux build is debugged.
-        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+        # linux x86_64 / macOS arm64 / windows AMD64.
+        # Omitted for now (these users install from the sdist; add wheels in a patch):
+        # - Linux aarch64 (ubuntu-24.04-arm): flaky manylinux build.
+        # - Intel macOS (macos-13): GitHub's Intel runners queue indefinitely. To restore
+        #   x86_64 macOS without it, cross-compile on macos-14 (archs = arm64 + x86_64).
+        os: [ubuntu-latest, macos-14, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
