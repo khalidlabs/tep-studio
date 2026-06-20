@@ -255,41 +255,6 @@ def _benchmark_tab() -> html.Div:
     )
 
 
-def _rl_tab() -> html.Div:
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.H4("RL rollout", style={"marginTop": 0}),
-                    _field("Reward preset", dcc.Dropdown(id="rl-reward", clearable=False, value="economic", options=[
-                        {"label": "Economic (−operating cost)", "value": "economic"},
-                        {"label": "Tracking (production + %G)", "value": "tracking"},
-                        {"label": "Safety (constraint margin)", "value": "safety"},
-                        {"label": "Move suppression", "value": "move"},
-                    ])),
-                    _field("Action level", dcc.RadioItems(id="rl-action-level", options=[{"label": " Direct MV", "value": "direct_mv"}, {"label": " Setpoint", "value": "setpoint"}], value="direct_mv")),
-                    _field("Operating mode", dcc.Dropdown(id="rl-mode", options=mode_options(), value="mode1", clearable=False)),
-                    _field("Horizon (h)", dcc.Input(id="rl-horizon", type="number", value=6.0, min=0.5, step="any", className="tep-input", style=theme.INPUT)),
-                    _button("Preview random rollout", "rl-preview-btn"),
-                    html.Div(id="rl-status", style=theme.status_style("muted")),
-                    html.Div(id="rl-banner", style=theme.HIDDEN),
-                    html.Hr(),
-                    html.H4("Offline-RL export"),
-                    _field("Run", dcc.Dropdown(id="rl-export-run", options=[], placeholder="run a simulation first")),
-                    _field("Format", dcc.RadioItems(id="rl-export-format", options=[{"label": " NPZ", "value": "npz"}, {"label": " Parquet", "value": "parquet"}], value="npz", inline=True)),
-                    _button("Download transitions", "rl-export-btn", primary=False),
-                    dcc.Download(id="rl-download"),
-                ],
-                className="tep-col-left",
-                style={**theme.CARD, **theme.COL_LEFT},
-            ),
-            html.Div(dcc.Loading(dcc.Graph(id="rl-reward-graph", config=theme.GRAPH_CONFIG, style={"height": "560px"})), style={**theme.CARD, **theme.COL_RIGHT}),
-        ],
-        className="tep-row",
-        style=theme.ROW,
-    )
-
-
 def build_layout() -> html.Div:
     return html.Div(
         [
@@ -312,7 +277,6 @@ def build_layout() -> html.Div:
                     dcc.Tab(label="Dataset", value="dataset", children=_dataset_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Compare", value="compare", children=_compare_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Benchmark", value="benchmark", children=_benchmark_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="RL", value="rl", children=_rl_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Metrics / Record", value="record", children=_record_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                 ],
                 style={"marginBottom": theme.SP_3},

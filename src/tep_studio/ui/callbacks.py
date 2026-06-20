@@ -296,7 +296,6 @@ def register_callbacks(app, store) -> None:
         Output("compare-table", "data"),
         Output("compare-table", "columns"),
         Output("record-run", "options"),
-        Output("rl-export-run", "options"),
         Input("session-runs", "data"),
     )
     def _update_run_lists(session):
@@ -304,7 +303,7 @@ def register_callbacks(app, store) -> None:
         options = [{"label": f"{s['name']} ({s['run_id']})", "value": s["run_id"]} for s in session]
         keys = ("run_id", "name", "loop_type", "terminated", "final_time", "peak_reactor_pressure", "iae_reactor_pressure", "ise_reactor_pressure", "time_to_shutdown")
         columns = [{"name": k, "id": k} for k in keys]
-        return options, session, columns, options, options
+        return options, session, columns, options
 
     # -- apply per-mode setpoints when the operating mode changes ---------
     @app.callback(
@@ -367,86 +366,6 @@ def register_callbacks(app, store) -> None:
             return rows, columns, status, theme.HIDDEN, "", download, False
         except Exception as exc:
             return no_update, no_update, "", theme.banner_style("danger"), f"Benchmark failed — {exc}", no_update, False
-
-    # -- RL rollout preview ----------------------------------------------
-    @app.callback(
-        Output("rl-reward-graph", "figure"),
-        Output("rl-status", "children"),
-        Output("rl-banner", "style"),
-        Output("rl-banner", "children"),
-        Output("rl-preview-btn", "disabled", allow_duplicate=True),
-        Input("rl-preview-btn", "n_clicks"),
-        State("rl-reward", "value"),
-        State("rl-action-level", "value"),
-        State("rl-mode", "value"),
-        State("rl-horizon", "value"),
-        prevent_initial_call=True,
-    )
-    def rl_preview(n, reward_name, action_level, mode, horizon):
-        try:
-            from tep_studio.simulation import rl
-            from tep_studio.simulation.gym_env import GymTEPEnv
-
-            reward_fn = {
-                "economic": rl.economic_reward(),
-                "tracking": rl.tracking_reward({"production_rate": 22.9, "pct_g": 53.8}),
-                "safety": rl.safety_reward(),
-                "move": rl.move_suppression_reward(),
-            }.get(reward_name or "economic", rl.economic_reward())
-            env = GymTEPEnv(control_interval=0.05, horizon=float(horizon or 6.0), reward_fn=reward_fn, action_level=action_level or "direct_mv", mode=mode or "mode1")
-            env.reset(seed=0)
-            times, rewards = [], []
-            terminated = truncated = False
-            while not (terminated or truncated):
-                _, reward, terminated, truncated, info = env.step(env.action_space.sample())
-                times.append(info["time"])
-                rewards.append(reward)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=times, y=rewards, mode="lines", line=dict(color=theme.PRIMARY, width=1.5)))
-            fig.update_layout(template="tep", title=f"Reward per step — {reward_name} ({action_level})", xaxis_title="Time (h)", yaxis_title="reward")
-            status = f"rolled out {len(rewards)} steps · total reward {sum(rewards):.2f}" + (" · plant tripped" if terminated else "")
-            return fig, status, theme.HIDDEN, "", False
-        except Exception as exc:
-            return no_update, "", theme.banner_style("danger"), f"Rollout failed — {exc}", False
-
-    # -- offline-RL transition export ------------------------------------
-    @app.callback(
-        Output("rl-download", "data"),
-        Input("rl-export-btn", "n_clicks"),
-        State("rl-export-run", "value"),
-        State("rl-export-format", "value"),
-        prevent_initial_call=True,
-    )
-    def rl_export(n, run_id, fmt):
-        run = store.get(run_id) if run_id else None
-        if run is None:
-            raise PreventUpdate
-        import io
-
-        import numpy as np
-
-        from tep_studio.simulation.rl import to_transitions
-
-        transitions = to_transitions(run)
-        if fmt == "parquet":
-            import pandas as pd
-
-            columns = {}
-            for key in ("obs", "action", "next_obs"):
-                arr = transitions[key]
-                for j in range(arr.shape[1]):
-                    columns[f"{key}_{j}"] = arr[:, j]
-            columns["reward"] = transitions["reward"]
-            columns["terminated"] = transitions["terminated"]
-            columns["truncated"] = transitions["truncated"]
-            buffer = io.BytesIO()
-            pd.DataFrame(columns).to_parquet(buffer, index=False)
-            payload, filename = buffer.getvalue(), f"{run.run_id}_transitions.parquet"
-        else:
-            buffer = io.BytesIO()
-            np.savez(buffer, **transitions)
-            payload, filename = buffer.getvalue(), f"{run.run_id}_transitions.npz"
-        return dcc.send_bytes(lambda b: b.write(payload), filename)
 
     # -- RunStore capacity / eviction indicator ---------------------------
     @app.callback(Output("store-capacity", "children"), Output("store-capacity", "style"), Input("session-runs", "data"))
@@ -673,7 +592,7 @@ def register_callbacks(app, store) -> None:
         )
 
     # -- disable the Run buttons while a synchronous run is in flight -----
-    for _btn in ("run-btn", "run-step-btn", "run-batch-btn", "bench-run-btn", "rl-preview-btn"):
+    for _btn in ("run-btn", "run-step-btn", "run-batch-btn", "bench-run-btn"):
         app.clientside_callback(
             "function(n){ return !!n; }",
             Output(_btn, "disabled", allow_duplicate=True),
