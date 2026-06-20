@@ -60,7 +60,7 @@ tep-ui = "tep_studio.ui.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/khalidlabs/tep-studio"
-Documentation = "https://khalidlabs.github.io/tep-studio/"
+Documentation = "https://khalidlabs.com/tep-studio/"
 Source = "https://github.com/khalidlabs/tep-studio"
 Issues = "https://github.com/khalidlabs/tep-studio/issues"
 
