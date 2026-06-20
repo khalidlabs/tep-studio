@@ -1,14 +1,3 @@
----
-title: TEP Studio
-emoji: 🏭
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Modified Tennessee Eastman process simulator (Dash UI)
----
-
 # TEP Studio
 
 This repository contains a schema-driven Python implementation of the modified Tennessee Eastman Process in `temexd_mod`. Simulation code lives in `src/tep_studio/simulation/`; `src/tep_studio/__init__.py` re-exports the public API.
