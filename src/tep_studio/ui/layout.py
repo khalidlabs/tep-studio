@@ -15,6 +15,7 @@ from tep_studio.ui.widgets import (
     DEFAULT_PLOT_VARS,
     disturbance_options,
     measurement_options,
+    mode_options,
     mv_sliders,
     setpoint_inputs,
     setpoint_target_options,
@@ -22,7 +23,8 @@ from tep_studio.ui.widgets import (
 
 
 def _field(label: str, control) -> html.Div:
-    return html.Div([html.Label(label, style={"fontSize": theme.FS_SM, "fontWeight": "600"}), control], style={"marginBottom": theme.SP_2})
+    label_style = {"fontSize": theme.FS_SM, "fontWeight": "500", "color": theme.TEXT, "display": "block", "marginBottom": theme.SP_1}
+    return html.Div([html.Label(label, style=label_style), control], style={"marginBottom": theme.SP_3})
 
 
 def _button(label: str, btn_id: str, *, primary: bool = True, **kwargs) -> html.Button:
@@ -72,6 +74,7 @@ def _config_card() -> html.Div:
     return html.Div(
         [
             html.H4("Run configuration", style={"marginTop": 0}),
+            _field("Operating mode", dcc.Dropdown(id="mode-select", options=mode_options(), value="mode1", clearable=False)),
             _field("Loop", dcc.RadioItems(id="loop-type", options=[{"label": " Closed loop", "value": "closed"}, {"label": " Open loop", "value": "open"}], value="closed", inline=True)),
             _field("Horizon (h)", dcc.Input(id="horizon", type="number", value=12.0, min=0.1, step="any", className="tep-input", style=theme.INPUT)),
             _field("Fidelity", dcc.RadioItems(id="ci-preset", options=[{"label": " Explore (Δt=0.01 h)", "value": 0.01}, {"label": " Fidelity (Δt=0.0005 h)", "value": 0.0005}], value=0.01)),
@@ -223,6 +226,70 @@ def _record_tab() -> html.Div:
     )
 
 
+def _benchmark_tab() -> html.Div:
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.H4("FDD benchmark", style={"marginTop": 0}),
+                    html.Div("Fault-free + per-IDV runs with labels, fixed onset, and train/test splits.", style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}),
+                    _field("Faults (IDVs)", dcc.Dropdown(id="bench-faults", options=disturbance_options(), value=["idv_01", "idv_04", "idv_06"], multi=True)),
+                    _field("Operating mode", dcc.Dropdown(id="bench-mode", options=mode_options(), value="mode1", clearable=False)),
+                    _field("Runs per fault", dcc.Input(id="bench-runs", type="number", value=2, min=1, step=1, className="tep-input", style=theme.INPUT)),
+                    _field("Fault onset (h)", dcc.Input(id="bench-onset", type="number", value=8.0, min=0, step="any", className="tep-input", style=theme.INPUT)),
+                    _field("Horizon (h)", dcc.Input(id="bench-horizon", type="number", value=24.0, min=0.5, step="any", className="tep-input", style=theme.INPUT)),
+                    _field("Sampling (min)", dcc.Input(id="bench-sampling", type="number", value=3.0, min=0.1, step="any", className="tep-input", style=theme.INPUT)),
+                    _field("Format", dcc.RadioItems(id="bench-format", options=[{"label": " CSV", "value": "csv"}, {"label": " Parquet", "value": "parquet"}, {"label": " JSON", "value": "json"}], value="csv", inline=True)),
+                    _button("Generate & download", "bench-run-btn"),
+                    html.Div(id="bench-status", style=theme.status_style("muted")),
+                    html.Div(id="bench-banner", style=theme.HIDDEN),
+                    dcc.Download(id="bench-download"),
+                ],
+                className="tep-col-left",
+                style={**theme.CARD, **theme.COL_LEFT},
+            ),
+            html.Div([html.H4("Per-fault run summary", style={"marginTop": 0}), dcc.Loading(_table("bench-summary-table"))], style={**theme.CARD, **theme.COL_RIGHT}),
+        ],
+        className="tep-row",
+        style=theme.ROW,
+    )
+
+
+def _rl_tab() -> html.Div:
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.H4("RL rollout", style={"marginTop": 0}),
+                    _field("Reward preset", dcc.Dropdown(id="rl-reward", clearable=False, value="economic", options=[
+                        {"label": "Economic (−operating cost)", "value": "economic"},
+                        {"label": "Tracking (production + %G)", "value": "tracking"},
+                        {"label": "Safety (constraint margin)", "value": "safety"},
+                        {"label": "Move suppression", "value": "move"},
+                    ])),
+                    _field("Action level", dcc.RadioItems(id="rl-action-level", options=[{"label": " Direct MV", "value": "direct_mv"}, {"label": " Setpoint", "value": "setpoint"}], value="direct_mv")),
+                    _field("Operating mode", dcc.Dropdown(id="rl-mode", options=mode_options(), value="mode1", clearable=False)),
+                    _field("Horizon (h)", dcc.Input(id="rl-horizon", type="number", value=6.0, min=0.5, step="any", className="tep-input", style=theme.INPUT)),
+                    _button("Preview random rollout", "rl-preview-btn"),
+                    html.Div(id="rl-status", style=theme.status_style("muted")),
+                    html.Div(id="rl-banner", style=theme.HIDDEN),
+                    html.Hr(),
+                    html.H4("Offline-RL export"),
+                    _field("Run", dcc.Dropdown(id="rl-export-run", options=[], placeholder="run a simulation first")),
+                    _field("Format", dcc.RadioItems(id="rl-export-format", options=[{"label": " NPZ", "value": "npz"}, {"label": " Parquet", "value": "parquet"}], value="npz", inline=True)),
+                    _button("Download transitions", "rl-export-btn", primary=False),
+                    dcc.Download(id="rl-download"),
+                ],
+                className="tep-col-left",
+                style={**theme.CARD, **theme.COL_LEFT},
+            ),
+            html.Div(dcc.Loading(dcc.Graph(id="rl-reward-graph", config=theme.GRAPH_CONFIG, style={"height": "560px"})), style={**theme.CARD, **theme.COL_RIGHT}),
+        ],
+        className="tep-row",
+        style=theme.ROW,
+    )
+
+
 def build_layout() -> html.Div:
     return html.Div(
         [
@@ -231,11 +298,8 @@ def build_layout() -> html.Div:
             dcc.Store(id="batch-store", storage_type="memory"),
             html.Div(
                 [
-                    html.Div("🏭", className="tep-logo"),
-                    html.Div([
-                        html.H1("Simulation Studio", className="tep-title"),
-                        html.Div("Tennessee Eastman Process · open / closed-loop runs · disturbances · step tests · datasets", className="tep-subtitle"),
-                    ]),
+                    html.H1("Tennessee Eastman Process — Simulation Studio", className="tep-title"),
+                    html.Div("Open / closed-loop runs · disturbances · step tests · dataset generation", className="tep-subtitle"),
                 ],
                 className="tep-header",
             ),
@@ -247,6 +311,8 @@ def build_layout() -> html.Div:
                     dcc.Tab(label="Step Test", value="steptest", children=_step_test_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Dataset", value="dataset", children=_dataset_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Compare", value="compare", children=_compare_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+                    dcc.Tab(label="Benchmark", value="benchmark", children=_benchmark_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+                    dcc.Tab(label="RL", value="rl", children=_rl_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                     dcc.Tab(label="Metrics / Record", value="record", children=_record_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
                 ],
                 style={"marginBottom": theme.SP_3},

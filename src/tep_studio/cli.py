@@ -20,6 +20,7 @@ from typing import Sequence
 # -- argument helpers ------------------------------------------------------
 def _add_scenario_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--loop", choices=("closed", "open"), default="closed", help="control loop type (default: closed)")
+    parser.add_argument("--mode", choices=("mode1", "mode2", "mode3", "mode4", "mode5", "mode6"), default="mode1", help="operating mode (default: mode1)")
     parser.add_argument("--horizon", type=float, default=12.0, help="simulated horizon in hours (default: 12)")
     parser.add_argument("--control-interval", dest="control_interval", type=float, default=0.01, help="step size in hours (default: 0.01)")
     parser.add_argument("--seed", type=float, default=None, help="measurement-noise seed for reproducibility")
@@ -55,6 +56,7 @@ def _build_scenario(args, *, name: str = "cli"):
     cfg = ScenarioConfig(
         name=name,
         loop_type=args.loop,
+        mode=args.mode,
         horizon=args.horizon,
         control_interval=args.control_interval,
         seed=args.seed,
@@ -151,6 +153,33 @@ def _cmd_list(args) -> int:
     return 0
 
 
+def _cmd_benchmark(args) -> int:
+    from tep_studio.simulation.benchmark import ALL_IDVS, make_fdd_benchmark
+
+    faults = tuple(s.strip() for s in args.faults.split(",")) if args.faults else ALL_IDVS
+    benchmark = make_fdd_benchmark(
+        faults=faults, n_runs_per_fault=args.runs, onset_h=args.onset, horizon_h=args.horizon,
+        sampling_min=args.sampling_min, mode=args.mode,
+        progress=lambda frac, msg: print(f"  [{frac * 100:5.1f}%] {msg}", end="\r"),
+    )
+    fmt = "parquet" if str(args.out).endswith(".parquet") else ("json" if str(args.out).endswith(".json") else "csv")
+    benchmark.write(args.out, fmt=fmt)
+    print(f"\nwrote FDD benchmark: {len(benchmark.runs)} runs, faults={len(faults)} -> {args.out}")
+    return 0
+
+
+def _cmd_rl_export(args) -> int:
+    from tep_studio.analysis import run_scenario
+    from tep_studio.simulation.rl import to_transitions, write_transitions
+
+    run = run_scenario(_build_scenario(args, name="rl"))
+    transitions = to_transitions(run)
+    fmt = "parquet" if str(args.out).endswith(".parquet") else "npz"
+    write_transitions(transitions, args.out, fmt=fmt)
+    print(f"wrote {transitions['obs'].shape[0]} transitions -> {args.out}")
+    return 0
+
+
 def _cmd_version(args) -> int:
     import tep_studio
 
@@ -187,6 +216,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_list = sub.add_parser("list", help="list variables by role")
     p_list.add_argument("kind", choices=("disturbances", "measurements", "mvs", "setpoints"))
     p_list.set_defaults(func=_cmd_list)
+
+    p_bench = sub.add_parser("benchmark", help="generate a labeled FDD benchmark dataset (fault-free + per-IDV)")
+    p_bench.add_argument("--out", required=True, help="output path (.csv/.parquet/.json)")
+    p_bench.add_argument("--faults", default=None, help="comma-separated IDVs (default: all 28)")
+    p_bench.add_argument("--runs", type=int, default=1, help="runs (seeds) per fault (default: 1)")
+    p_bench.add_argument("--onset", type=float, default=8.0, help="fault onset time in hours (default: 8)")
+    p_bench.add_argument("--horizon", type=float, default=48.0, help="run horizon in hours (default: 48)")
+    p_bench.add_argument("--sampling-min", dest="sampling_min", type=float, default=3.0, help="sample period in minutes (default: 3)")
+    p_bench.add_argument("--mode", choices=("mode1", "mode2", "mode3", "mode4", "mode5", "mode6"), default="mode1", help="operating mode (default: mode1)")
+    p_bench.set_defaults(func=_cmd_benchmark)
+
+    p_rl = sub.add_parser("rl-export", help="export an offline-RL transition dataset from one run")
+    _add_scenario_args(p_rl)
+    p_rl.add_argument("--out", required=True, help="output path (.npz/.parquet)")
+    p_rl.set_defaults(func=_cmd_rl_export)
 
     p_version = sub.add_parser("version", help="print the installed version")
     p_version.set_defaults(func=_cmd_version)

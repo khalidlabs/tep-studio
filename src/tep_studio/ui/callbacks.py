@@ -95,7 +95,7 @@ def _metric_card(label: str, value) -> html.Div:
 
 def _scenario(
     loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_ids, dist_select, dist_start, name="scenario",
-    dist_mags=None, dist_mag_ids=None, solver_method="RK4", rtol=1e-6, atol=1e-8, fixed_step=0.0005, record_every=0,
+    dist_mags=None, dist_mag_ids=None, solver_method="RK4", rtol=1e-6, atol=1e-8, fixed_step=0.0005, record_every=0, mode="mode1",
 ) -> ScenarioConfig:
     flags = flags or []
     setpoints = {i["name"]: float(v) for i, v in zip(sp_ids, sp_values) if v is not None} or None
@@ -108,6 +108,7 @@ def _scenario(
     return ScenarioConfig(
         name=name,
         loop_type=loop,
+        mode=mode or "mode1",
         horizon=float(horizon or 12.0),
         control_interval=float(ci),
         seed=_parse_seed(seed),
@@ -148,6 +149,7 @@ _SIM_STATE = [
     State("atol", "value"),
     State("fixed-step", "value"),
     State("record-every", "value"),
+    State("mode-select", "value"),
 ]
 
 
@@ -189,11 +191,11 @@ def register_callbacks(app, store) -> None:
         State("session-runs", "data"),
         prevent_initial_call=True,
     )
-    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, session):
+    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode, session):
         try:
             cfg = _scenario(
                 loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name=f"{loop}_run",
-                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every, mode=mode,
             )
             cfg.validate()
             run = service.run_scenario(cfg)
@@ -294,6 +296,7 @@ def register_callbacks(app, store) -> None:
         Output("compare-table", "data"),
         Output("compare-table", "columns"),
         Output("record-run", "options"),
+        Output("rl-export-run", "options"),
         Input("session-runs", "data"),
     )
     def _update_run_lists(session):
@@ -301,7 +304,149 @@ def register_callbacks(app, store) -> None:
         options = [{"label": f"{s['name']} ({s['run_id']})", "value": s["run_id"]} for s in session]
         keys = ("run_id", "name", "loop_type", "terminated", "final_time", "peak_reactor_pressure", "iae_reactor_pressure", "ise_reactor_pressure", "time_to_shutdown")
         columns = [{"name": k, "id": k} for k in keys]
-        return options, session, columns, options
+        return options, session, columns, options, options
+
+    # -- apply per-mode setpoints when the operating mode changes ---------
+    @app.callback(
+        Output({"type": "sp-input", "name": ALL}, "value", allow_duplicate=True),
+        Input("mode-select", "value"),
+        State({"type": "sp-input", "name": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+    def _apply_mode_setpoints(mode, sp_ids):
+        from tep_studio.ui.service import mode_default_setpoints
+
+        sp = mode_default_setpoints(mode or "mode1")
+        return [round(float(sp[i["name"]]), 3) for i in sp_ids]
+
+    # -- FDD benchmark generation + download ------------------------------
+    @app.callback(
+        Output("bench-summary-table", "data"),
+        Output("bench-summary-table", "columns"),
+        Output("bench-status", "children"),
+        Output("bench-banner", "style"),
+        Output("bench-banner", "children"),
+        Output("bench-download", "data"),
+        Output("bench-run-btn", "disabled", allow_duplicate=True),
+        Input("bench-run-btn", "n_clicks"),
+        State("bench-faults", "value"),
+        State("bench-mode", "value"),
+        State("bench-runs", "value"),
+        State("bench-onset", "value"),
+        State("bench-horizon", "value"),
+        State("bench-sampling", "value"),
+        State("bench-format", "value"),
+        prevent_initial_call=True,
+    )
+    def run_benchmark(n, faults, mode, runs, onset, horizon, sampling, fmt):
+        try:
+            from tep_studio.simulation.benchmark import make_fdd_benchmark
+
+            faults = tuple(faults or [])
+            bench = make_fdd_benchmark(
+                faults=faults, n_runs_per_fault=int(runs or 1), onset_h=float(onset or 8.0),
+                horizon_h=float(horizon or 24.0), sampling_min=float(sampling or 3.0), mode=mode or "mode1",
+            )
+            summary = bench.summary()
+            rows = summary.to_dict("records")
+            columns = [{"name": c, "id": c} for c in summary.columns]
+            frame = bench.to_frame()
+            fmt = fmt or "csv"
+            if fmt == "parquet":
+                import io
+
+                buffer = io.BytesIO()
+                frame.to_parquet(buffer, index=False)
+                payload, filename = buffer.getvalue(), "tep_fdd_benchmark.parquet"
+            elif fmt == "json":
+                payload, filename = frame.to_json(orient="records").encode("utf-8"), "tep_fdd_benchmark.json"
+            else:
+                payload, filename = frame.to_csv(index=False).encode("utf-8"), "tep_fdd_benchmark.csv"
+            download = dcc.send_bytes(lambda b: b.write(payload), filename)
+            status = f"generated {len(bench.runs)} runs ({len(faults)} faults + fault-free), {len(frame)} rows"
+            return rows, columns, status, theme.HIDDEN, "", download, False
+        except Exception as exc:
+            return no_update, no_update, "", theme.banner_style("danger"), f"Benchmark failed — {exc}", no_update, False
+
+    # -- RL rollout preview ----------------------------------------------
+    @app.callback(
+        Output("rl-reward-graph", "figure"),
+        Output("rl-status", "children"),
+        Output("rl-banner", "style"),
+        Output("rl-banner", "children"),
+        Output("rl-preview-btn", "disabled", allow_duplicate=True),
+        Input("rl-preview-btn", "n_clicks"),
+        State("rl-reward", "value"),
+        State("rl-action-level", "value"),
+        State("rl-mode", "value"),
+        State("rl-horizon", "value"),
+        prevent_initial_call=True,
+    )
+    def rl_preview(n, reward_name, action_level, mode, horizon):
+        try:
+            from tep_studio.simulation import rl
+            from tep_studio.simulation.gym_env import GymTEPEnv
+
+            reward_fn = {
+                "economic": rl.economic_reward(),
+                "tracking": rl.tracking_reward({"production_rate": 22.9, "pct_g": 53.8}),
+                "safety": rl.safety_reward(),
+                "move": rl.move_suppression_reward(),
+            }.get(reward_name or "economic", rl.economic_reward())
+            env = GymTEPEnv(control_interval=0.05, horizon=float(horizon or 6.0), reward_fn=reward_fn, action_level=action_level or "direct_mv", mode=mode or "mode1")
+            env.reset(seed=0)
+            times, rewards = [], []
+            terminated = truncated = False
+            while not (terminated or truncated):
+                _, reward, terminated, truncated, info = env.step(env.action_space.sample())
+                times.append(info["time"])
+                rewards.append(reward)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=times, y=rewards, mode="lines", line=dict(color=theme.PRIMARY, width=1.5)))
+            fig.update_layout(template="tep", title=f"Reward per step — {reward_name} ({action_level})", xaxis_title="Time (h)", yaxis_title="reward")
+            status = f"rolled out {len(rewards)} steps · total reward {sum(rewards):.2f}" + (" · plant tripped" if terminated else "")
+            return fig, status, theme.HIDDEN, "", False
+        except Exception as exc:
+            return no_update, "", theme.banner_style("danger"), f"Rollout failed — {exc}", False
+
+    # -- offline-RL transition export ------------------------------------
+    @app.callback(
+        Output("rl-download", "data"),
+        Input("rl-export-btn", "n_clicks"),
+        State("rl-export-run", "value"),
+        State("rl-export-format", "value"),
+        prevent_initial_call=True,
+    )
+    def rl_export(n, run_id, fmt):
+        run = store.get(run_id) if run_id else None
+        if run is None:
+            raise PreventUpdate
+        import io
+
+        import numpy as np
+
+        from tep_studio.simulation.rl import to_transitions
+
+        transitions = to_transitions(run)
+        if fmt == "parquet":
+            import pandas as pd
+
+            columns = {}
+            for key in ("obs", "action", "next_obs"):
+                arr = transitions[key]
+                for j in range(arr.shape[1]):
+                    columns[f"{key}_{j}"] = arr[:, j]
+            columns["reward"] = transitions["reward"]
+            columns["terminated"] = transitions["terminated"]
+            columns["truncated"] = transitions["truncated"]
+            buffer = io.BytesIO()
+            pd.DataFrame(columns).to_parquet(buffer, index=False)
+            payload, filename = buffer.getvalue(), f"{run.run_id}_transitions.parquet"
+        else:
+            buffer = io.BytesIO()
+            np.savez(buffer, **transitions)
+            payload, filename = buffer.getvalue(), f"{run.run_id}_transitions.npz"
+        return dcc.send_bytes(lambda b: b.write(payload), filename)
 
     # -- RunStore capacity / eviction indicator ---------------------------
     @app.callback(Output("store-capacity", "children"), Output("store-capacity", "style"), Input("session-runs", "data"))
@@ -365,17 +510,18 @@ def register_callbacks(app, store) -> None:
         State("atol", "value"),
         State("fixed-step", "value"),
         State("record-every", "value"),
+        State("mode-select", "value"),
         State("batch-seeds", "value"),
         State("batch-field", "value"),
         State("batch-values", "value"),
         State("session-runs", "data"),
         prevent_initial_call=True,
     )
-    def run_batch(n, loop, horizon, ci, flags, sp_v, sp_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, seeds_text, field, values_text, session):
+    def run_batch(n, loop, horizon, ci, flags, sp_v, sp_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode, seeds_text, field, values_text, session):
         try:
             base = _scenario(
                 loop, horizon, ci, None, flags, sp_v, sp_id, [], [], dist, dist_start, name="batch",
-                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every, mode=mode,
             )
             param_grid = {field: tuple(_floats(values_text))} if field and values_text else {}
             spec = BatchSpec(base=base, seeds=tuple(_floats(seeds_text)), param_grid=param_grid, label="batch")
@@ -478,10 +624,10 @@ def register_callbacks(app, store) -> None:
 
     # -- scenario save / load --------------------------------------------
     @app.callback(Output("scenario-download", "data"), Input("save-scenario-btn", "n_clicks"), *_SIM_STATE, prevent_initial_call=True)
-    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every):
+    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode):
         cfg = _scenario(
             loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name="scenario",
-            dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+            dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every, mode=mode,
         )
         return dcc.send_string(cfg.to_json(), f"{cfg.name}.json")
 
@@ -527,7 +673,7 @@ def register_callbacks(app, store) -> None:
         )
 
     # -- disable the Run buttons while a synchronous run is in flight -----
-    for _btn in ("run-btn", "run-step-btn", "run-batch-btn"):
+    for _btn in ("run-btn", "run-step-btn", "run-batch-btn", "bench-run-btn", "rl-preview-btn"):
         app.clientside_callback(
             "function(n){ return !!n; }",
             Output(_btn, "disabled", allow_duplicate=True),

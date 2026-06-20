@@ -1,12 +1,13 @@
 """Central design tokens, reusable style dicts, and the shared Plotly template.
 
-Single source of truth for the interface look so colors/spacing/typography are not
-re-spelled inline across ``layout.py``/``widgets.py``/``callbacks.py``. Pure data
-plus one Plotly template registration (plotly is a ``ui`` dependency). The pseudo
-states buttons/inputs need (``:hover``/``:focus``/``:disabled``) and the richer
-chrome (header, pill tabs) live in the global CSS in ``app.py`` -- inline styles
-cannot express them -- and reference the same values via CSS variables, so this
-module and that CSS must stay in sync.
+Single source of truth for the interface look. Design principles: a neutral base
+(near-white surfaces, dark-grey text, light-grey borders) with one accent colour used
+only for interactive states (active tab, primary button, focus ring, selected items);
+one spacing scale applied uniformly; every control the same height/border/radius; a
+restrained typographic hierarchy from one sans-serif family; bounded cards with subtle
+borders, not heavy shadows. The pseudo-states controls need (``:hover``/``:focus``/
+``:disabled``) and the chrome live in the global CSS in ``app.py`` and reference the
+same values via CSS variables, so this module and that CSS must stay in sync.
 """
 
 from __future__ import annotations
@@ -14,94 +15,91 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import plotly.io as pio
 
-# -- color tokens (light theme) -------------------------------------------
-BG = "#f4f5fb"  # app background (a CSS gradient overlays this in app.py)
+# -- neutral base ---------------------------------------------------------
+BG = "#f6f7f9"  # near-white page
 SURFACE = "#ffffff"  # cards
-SURFACE_ALT = "#f6f7fc"  # code/pre, table header, metric cards, hover fills
-BORDER = "#e7e9f2"
-BORDER_STRONG = "#d3d7e6"
-TEXT = "#1c2333"
-TITLE = "#0f1426"
-TEXT_MUTED = "#5b6478"
-TEXT_FAINT = "#99a0b4"
-PRIMARY = "#6d5cf5"  # indigo accent
-PRIMARY_HOVER = "#5b48ec"
-PRIMARY_ACTIVE = "#4a39d4"
-ACCENT = "#06b6d4"  # cyan, for small highlights
-PRIMARY_GRADIENT = "linear-gradient(135deg, #6d5cf5 0%, #8b5cf6 100%)"
-SUCCESS = "#0f9d6b"
+SURFACE_ALT = "#f3f4f6"  # table header / code / hover fills
+BORDER = "#e5e7eb"  # light grey
+BORDER_STRONG = "#d1d5db"
+TEXT = "#1f2937"  # dark grey body text (not pure black)
+TITLE = "#111827"  # headings
+TEXT_MUTED = "#6b7280"
+TEXT_FAINT = "#9ca3af"
+
+# -- single accent (interactive states only) ------------------------------
+PRIMARY = "#4f46e5"
+PRIMARY_HOVER = "#4338ca"
+PRIMARY_ACTIVE = "#3730a3"
+PRIMARY_SOFT = "#eef2ff"  # the accent at low intensity (selected/hover tint)
+FOCUS_RING = "rgba(79,70,229,0.35)"
+
+# -- semantic feedback (banners only; not decoration) ---------------------
+SUCCESS = "#15803d"
 WARNING = "#b45309"
-DANGER = "#d92d20"
-DANGER_BG = "#fef3f2"
-SUCCESS_BG = "#ecfdf3"
-WARNING_BG = "#fffaeb"
-FOCUS_RING = "rgba(109,92,245,0.30)"
+DANGER = "#b91c1c"
+SUCCESS_BG = "#f0fdf4"
+WARNING_BG = "#fffbeb"
+DANGER_BG = "#fef2f2"
 
-# -- plot palette (sourced by figures.py) ---------------------------------
-BLUE = "#3b6df0"  # primary single-trace color
-RED = "#e5484d"  # constraint-limit lines
-PALETTE = ["#6d5cf5", "#06b6d4", "#0f9d6b", "#f59e0b", "#ef4444", "#8b5cf6", "#0ea5e9"]
-GRID = "#eef0f7"
+# -- muted plot sequence (data series, applied via the Plotly template) ----
+BLUE = "#4c72b0"  # primary single-trace colour
+RED = "#c44e52"  # constraint-limit lines
+PALETTE = ["#4c72b0", "#dd8452", "#55a868", "#c44e52", "#8172b3", "#937860", "#7f7f7f"]
+GRID = "#eef0f3"
 
-# -- typography -----------------------------------------------------------
-FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif'
+# -- typography (one family; size + weight deliberate) --------------------
+FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
 FONT_MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 FS_XS = "11px"
 FS_SM = "12px"
 FS_MD = "13px"
-FS_LG = "16px"
-FS_XL = "22px"
+FS_LG = "15px"
+FS_XL = "20px"
 
-# -- spacing scale --------------------------------------------------------
+# -- one spacing scale ----------------------------------------------------
 SP_1 = "4px"
 SP_2 = "8px"
 SP_3 = "12px"
 SP_4 = "16px"
 SP_5 = "24px"
 
-# -- radius / shadow ------------------------------------------------------
-RADIUS = "14px"
-RADIUS_SM = "9px"
-SHADOW = "0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06)"
-SHADOW_MD = "0 8px 24px rgba(16,24,40,0.10)"
+# -- radius / control height / shadow -------------------------------------
+RADIUS = "10px"  # cards
+RADIUS_SM = "6px"  # controls
+CONTROL_HEIGHT = "34px"
+SHADOW = "0 1px 2px rgba(17,24,39,0.04)"  # whisper; cards lean on borders
 
 
 # -- reusable style dicts -------------------------------------------------
 CARD = {
     "border": f"1px solid {BORDER}",
     "borderRadius": RADIUS,
-    "padding": "18px",
+    "padding": SP_4,
     "marginBottom": SP_3,
     "backgroundColor": SURFACE,
     "boxShadow": SHADOW,
 }
-COL_LEFT = {"flex": "0 0 360px", "maxWidth": "360px"}
+COL_LEFT = {"flex": "0 0 340px", "maxWidth": "340px"}
 COL_RIGHT = {"flex": "1 1 auto", "minWidth": "0"}
 ROW = {"display": "flex", "gap": SP_4, "alignItems": "flex-start"}
 
-# Tabs render as a segmented pill bar (container styled in app.py CSS via #tabs).
+# Tabs: a bottom-bordered bar with an accent underline on the active tab.
 TAB = {
-    "padding": "8px 18px",
-    "fontWeight": "600",
+    "padding": "10px 14px",
+    "fontWeight": "500",
     "fontSize": FS_MD,
     "border": "none",
-    "borderRadius": "10px",
+    "borderBottom": "2px solid transparent",
     "backgroundColor": "transparent",
     "color": TEXT_MUTED,
 }
-TAB_SELECTED = {
-    **TAB,
-    "color": "#ffffff",
-    "backgroundColor": PRIMARY,
-    "boxShadow": "0 2px 8px rgba(109,92,245,0.35)",
-}
+TAB_SELECTED = {**TAB, "fontWeight": "600", "color": PRIMARY, "borderBottom": f"2px solid {PRIMARY}"}
 
-# Buttons carry a className (so the CSS pseudo-states in app.py apply) plus a
-# minimal inline dict for per-instance layout (width/margins).
+# Buttons carry a className (CSS owns colour/height/states); the dict is layout-only.
 BTN_PRIMARY_CLASS = "tep-btn tep-btn--primary"
 BTN_SECONDARY_CLASS = "tep-btn tep-btn--secondary"
-BTN_PRIMARY = {"width": "100%", "padding": "10px 14px", "fontWeight": "600"}
-BTN_SECONDARY = {"padding": "7px 14px", "fontWeight": "500"}
+BTN_PRIMARY = {"width": "100%"}
+BTN_SECONDARY = {}
 
 INPUT = {"width": "120px"}
 INPUT_WIDE = {"width": "100%"}
@@ -126,9 +124,8 @@ def banner_style(kind: str = "danger") -> dict:
         "color": fg,
         "border": f"1px solid {fg}",
         "borderRadius": RADIUS_SM,
-        "padding": "9px 12px",
+        "padding": "8px 12px",
         "fontSize": FS_SM,
-        "fontWeight": "500",
         "marginTop": SP_2,
         "display": "block",
     }
@@ -143,32 +140,37 @@ GRAPH_CONFIG = {
 }
 
 
-# -- Plotly template ------------------------------------------------------
+# -- Plotly template (one template, applied everywhere) -------------------
 def _register_template() -> None:
-    """Register the shared ``"tep"`` template once at import.
+    """Register the shared ``"tep"`` template once at import: transparent background,
+    light gridlines, bottom/left spines only, consistent margins, muted colourway.
 
     A bare ``Template()`` carries no ``uirevision``, so figure builders keep their
-    ``uirevision=None`` default (asserted by ``test_figures``).
+    ``uirevision=None`` default.
     """
     tpl = go.layout.Template()
     tpl.layout.font = dict(family=FONT_FAMILY, size=12, color=TEXT)
     tpl.layout.paper_bgcolor = "rgba(0,0,0,0)"
     tpl.layout.plot_bgcolor = "rgba(0,0,0,0)"
     tpl.layout.colorway = PALETTE
+    tpl.layout.margin = dict(l=56, r=16, t=40, b=44)
     axis = dict(
         gridcolor=GRID,
-        zerolinecolor=BORDER,
+        zeroline=False,
+        showline=True,
         linecolor=BORDER_STRONG,
+        linewidth=1,
+        mirror=False,  # no top / right spine
         ticks="outside",
+        ticklen=4,
         tickcolor=BORDER_STRONG,
         tickfont=dict(size=11, color=TEXT_MUTED),
         title_font=dict(size=12, color=TEXT_MUTED),
     )
     tpl.layout.xaxis = dict(axis)
     tpl.layout.yaxis = dict(axis)
-    tpl.layout.legend = dict(bgcolor="rgba(255,255,255,0.65)", borderwidth=0, font=dict(size=11, color=TEXT_MUTED))
-    tpl.layout.title = dict(font=dict(size=15, color=TITLE), x=0.01, xanchor="left")
-    tpl.layout.colorscale = dict(sequential=[[0, "#eef0fb"], [1, PRIMARY]])
+    tpl.layout.legend = dict(bgcolor="rgba(0,0,0,0)", borderwidth=0, font=dict(size=11, color=TEXT_MUTED))
+    tpl.layout.title = dict(font=dict(size=13, color=TITLE), x=0.0, xanchor="left")
     pio.templates["tep"] = tpl
 
 

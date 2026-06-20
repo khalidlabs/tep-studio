@@ -57,8 +57,15 @@ def build_simulator(cfg: ScenarioConfig) -> TennesseeEastmanProcess:
     return TennesseeEastmanProcess(solver_method=cfg.solver_method, rtol=cfg.rtol, atol=cfg.atol, fixed_step=cfg.fixed_step)
 
 
+def mode_default_setpoints(mode: str) -> dict[str, float]:
+    """The setpoint preset for an operating mode (Mode 1 = base case)."""
+    from tep_studio.simulation.modes import mode_setpoints
+
+    return dc.asdict(mode_setpoints(mode or "mode1"))
+
+
 def build_setpoints(cfg: ScenarioConfig) -> ControllerSetpoints:
-    return ControllerSetpoints(**{**default_setpoints(), **(cfg.setpoints or {})})
+    return ControllerSetpoints(**{**mode_default_setpoints(cfg.mode), **(cfg.setpoints or {})})
 
 
 def build_controller(cfg: ScenarioConfig) -> RickerMultiLoopController:
@@ -136,6 +143,7 @@ def _run_closed(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> 
         progress(0.05, "running closed-loop simulation")
     result = runner.run(
         seed=cfg.seed,
+        mode=cfg.mode,
         disturbance_schedule=disturbance_schedule_from(cfg),
         setpoint_schedule=setpoint_schedule_from(cfg, base_sp),
         record_every=cfg.resolved_record_every(),
@@ -166,7 +174,7 @@ def _run_closed(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> 
 
 def _run_open(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> RunResult:
     sim = build_simulator(cfg)
-    meas, _ = sim.reset(mode="mode1", seed=cfg.seed)
+    meas, _ = sim.reset(mode=cfg.mode, seed=cfg.seed)
     action_fn = _open_loop_action_fn(cfg)
     disturbance_schedule = disturbance_schedule_from(cfg)
     metrics = MetricsAccumulator(setpoints=ControllerSetpoints(**default_setpoints()))
