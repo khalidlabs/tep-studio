@@ -1,0 +1,15 @@
+build/
+dist/
+site/
+*.egg-info/
+*.pyc
+__pycache__/
+.pytest_cache/
+src/tep_studio/**/_tep_native*.c
+src/tep_studio/**/_tep_native*.so
+.tep_ui_cache/
+.DS_Store
+src/tep_studio/simulation/validation_outputs/
+# Local editor config and the research material (manuscript + schema) stay out of the published package repo.
+.claude/
+research/

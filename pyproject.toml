@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "cffi>=1.15"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tep-studio"
+version = "0.1.0"
+description = "Schema-driven Python simulator for the modified Tennessee Eastman Process."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Khalid", email = "wa3id.km@gmail.com" }]
+keywords = [
+  "tennessee-eastman",
+  "process-control",
+  "chemical-engineering",
+  "reinforcement-learning",
+  "gymnasium",
+  "simulation",
+  "control-systems",
+  "benchmark",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Project URLs are defined in the [project.urls] table below (after [project.scripts]).
+dependencies = [
+  "cffi>=1.15",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pandas>=1.5",
+  "gymnasium>=0.29",
+  "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+]
+ui = [
+  "dash[diskcache]>=2.16",
+  "plotly>=5.9",
+  "pyarrow>=14",
+  "comm>=0.2",
+]
+
+[project.scripts]
+tep = "tep_studio.cli:main"
+tep-ui = "tep_studio.ui.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/khalidlabs/tep-studio"
+Documentation = "https://khalidlabs.com/tep-studio/"
+Source = "https://github.com/khalidlabs/tep-studio"
+Issues = "https://github.com/khalidlabs/tep-studio/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Cross-platform wheels. The native extension is compiled from temexd_mod.c via
+# setup.py:cffi_modules, so cibuildwheel needs no special build step — only a smoke
+# test that the wheel imports and loads the compiled kernel on each target.
+# Architecture is chosen by the CI runner (see .github/workflows/wheels.yml), so the
+# default native `archs = "auto"` is left in place here.
+[tool.cibuildwheel]
+build-frontend = "build"
+test-command = 'python -c "import tep_studio, tep_studio.simulation.native"'
+# Skip the post-build import test on Linux only. cibuildwheel installs the wheel + its
+# deps into the bare manylinux container, where scipy ships no manylinux2014 wheel for
+# CPython 3.11+, so pip source-builds scipy and fails (no OpenBLAS). The Linux wheels
+# still build + auditwheel-repair correctly; the macOS/Windows import tests cover the
+# smoke check.
+test-skip = "*manylinux*"
+# Keep the matrix lean: skip PyPy, musllinux, and 32-bit (numpy/scipy wheels are
+# the binding constraint and are not published for those targets).
+skip = ["pp*", "*-musllinux_*", "*_i686", "*-win32"]
