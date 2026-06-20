@@ -49,6 +49,7 @@ nav:
   - Closed-Loop Control: control.md
   - Interface (Studio): ui.md
   - Validation: validation.md
+  - Comparison: comparison.md
   - Troubleshooting: troubleshooting.md
   - Development: development.md
   - Reference:
