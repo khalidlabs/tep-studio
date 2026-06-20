@@ -229,8 +229,16 @@ def build_layout() -> html.Div:
             dcc.Store(id="session-runs", storage_type="session", data=[]),
             dcc.Store(id="active-run", storage_type="memory"),
             dcc.Store(id="batch-store", storage_type="memory"),
-            html.H2("Tennessee Eastman Process — Simulation Studio", style={"marginBottom": theme.SP_1, "color": theme.TITLE}),
-            html.Div("Open / closed-loop runs · disturbances · step tests · dataset generation", style={"color": theme.TEXT_MUTED, "marginBottom": theme.SP_3}),
+            html.Div(
+                [
+                    html.Div("🏭", className="tep-logo"),
+                    html.Div([
+                        html.H1("Simulation Studio", className="tep-title"),
+                        html.Div("Tennessee Eastman Process · open / closed-loop runs · disturbances · step tests · datasets", className="tep-subtitle"),
+                    ]),
+                ],
+                className="tep-header",
+            ),
             dcc.Tabs(
                 id="tabs",
                 value="simulate",
