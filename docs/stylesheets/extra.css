@@ -1,0 +1,16 @@
+body {
+  line-height: 1.55;
+}
+
+code {
+  white-space: pre-wrap;
+}
+
+table {
+  font-size: 0.95rem;
+}
+
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+  white-space: normal;
+}
