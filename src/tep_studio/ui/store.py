@@ -22,6 +22,11 @@ class RunStore:
         self._capacity = int(capacity)
         self._mem: "OrderedDict[str, RunResult]" = OrderedDict()
 
+    @property
+    def capacity(self) -> int:
+        """Max cached runs before LRU eviction (read by the UI capacity meter)."""
+        return self._capacity
+
     def put(self, result: RunResult) -> str:
         run_id = result.run_id
         if self._cache is not None:

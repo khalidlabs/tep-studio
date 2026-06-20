@@ -228,6 +228,8 @@ def build_dataset(runs: Sequence[RunResult], *, fmt: str = "csv") -> tuple[bytes
         buffer = io.BytesIO()
         combined.to_parquet(buffer, index=False)
         return buffer.getvalue(), "tep_dataset.parquet"
+    if fmt == "json":
+        return combined.to_json(orient="records").encode("utf-8"), "tep_dataset.json"
     return combined.to_csv(index=False).encode("utf-8"), "tep_dataset.csv"
 
 

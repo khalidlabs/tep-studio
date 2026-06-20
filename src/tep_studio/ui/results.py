@@ -36,7 +36,9 @@ class RunResult:
 
     def summary(self) -> dict:
         """A small, JSON-safe dict for the session store / Compare table."""
-        iae = self.metrics.get("iae", {}) if isinstance(self.metrics, dict) else {}
+        metrics = self.metrics if isinstance(self.metrics, dict) else {}
+        iae = metrics.get("iae", {})
+        ise = metrics.get("ise", {})
         return {
             "run_id": self.run_id,
             "name": self.scenario.name,
@@ -46,6 +48,8 @@ class RunResult:
             "final_time": round(self.final_time, 3),
             "peak_reactor_pressure": _round(self.peak.get("reactor_pressure_max")),
             "iae_reactor_pressure": _round(iae.get("reactor_pressure"), 3),
+            "ise_reactor_pressure": _round(ise.get("reactor_pressure"), 3),
+            "time_to_shutdown": _round(metrics.get("time_to_shutdown"), 3),
             "created_at": self.created_at,
         }
 
