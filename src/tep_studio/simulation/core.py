@@ -77,10 +77,11 @@ class TennesseeEastmanProcess:
         """Initialise the plant and return ``(measurements, info)``.
 
         Args:
-            mode: operating point — only ``"mode1"`` (the Downs & Vogel base case) is
-                supported; anything else raises ``NotImplementedError``.
-            initial_state: optional full 50-element state to start from (defaults to the
-                Mode-1 steady state).
+            mode: operating point ``"mode1"``..``"mode6"``; an unknown mode raises
+                ``NotImplementedError``. Modes 3 and 6 (90/10) load a bundled
+                operating-point state; the others start from the base case.
+            initial_state: optional full 50-element state to start from (overrides the
+                mode's default; defaults to the base steady state).
             seed: optional measurement-noise seed for reproducibility.
             disturbances: optional 28-element IDV activation vector (defaults to none).
             ms_flag: measurement/feature bitmask forwarded to the kernel.
@@ -94,8 +95,13 @@ class TennesseeEastmanProcess:
         valid_modes = ("mode1", "mode2", "mode3", "mode4", "mode5", "mode6")
         if mode not in valid_modes:
             raise NotImplementedError(f"Unknown mode {mode!r}; expected one of {valid_modes} or an explicit initial_state.")
-        # All modes start from the base steady state; an operating mode is realised by the
-        # controller's setpoints, not by a distinct initial condition.
+        # Most modes start from the base steady state and are realised by the controller's
+        # setpoints; the 90/10 modes (3, 6) start from a bundled operating-point state that
+        # the base case cannot be steered to without tripping. An explicit initial_state wins.
+        if initial_state is None:
+            from tep_studio.simulation.modes import mode_initial_state
+
+            initial_state = mode_initial_state(mode)
         if ms_flag is not None:
             self.ms_flag = int(ms_flag)
         self.state = self.kernel.reset(initial_state=initial_state, seed=seed, ms_flag=self.ms_flag)

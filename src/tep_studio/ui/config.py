@@ -57,7 +57,7 @@ class ScenarioConfig:
     disturbances: tuple[DisturbanceActivation, ...] = ()
     setpoints: dict[str, float] | None = None  # closed loop; None -> seed from Mode-1 state
     enable_composition: bool = True
-    enable_overrides: bool = False
+    enable_overrides: bool = True  # high-pressure/level overrides are a safety function: on by default
     enable_pct_g_feedback: bool = False
     manual_mvs: dict[str, float] | None = None  # open loop; None -> nominal u0
     step_test: StepTestSpec | None = None

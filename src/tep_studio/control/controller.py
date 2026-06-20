@@ -144,7 +144,22 @@ class RickerMultiLoopController:
         self._r1 = nominal.ratios["r1"]
         self._r4 = nominal.ratios["r4"]
         self._fp = nominal.fp_base
+        # Ramped (rate-limited) production and %G setpoints, seeded bumplessly from the
+        # current measurements. The decentralized strategy moves these slow, feed-driven
+        # targets gradually (not in steps); ramping them avoids the large transients that
+        # otherwise trip the plant on an operating-point change.
+        self._ramped_production = float(meas[self._mi["stripper_underflow"]])
+        self._ramped_pct_g = float(meas[self._mi["stripper_underflow_G_concentration"]])
+        self._ramp_time = float(time)
         self._initialized = True
+
+    @staticmethod
+    def _ramp(current: float, target: float, rate: float, dt: float) -> float:
+        """Move ``current`` toward ``target`` by at most ``rate * dt`` (units per hour)."""
+        step = abs(rate) * dt
+        if target >= current:
+            return min(target, current + step)
+        return max(target, current - step)
 
     def compute_action(self, measurements: ArrayLike, *, time: float) -> tuple[np.ndarray, ControlStepDiagnostics]:
         """Map the current measurements to the 12 manipulated variables.
@@ -170,8 +185,15 @@ class RickerMultiLoopController:
         outputs: dict[str, float] = {}
         overrides_active: dict[str, bool] = {}
 
+        # 0. Rate-limit the slow production and %G setpoints toward their targets so an
+        # operating-point change is a gradual transition rather than a step.
+        dt = max(0.0, self._time - self._ramp_time)
+        self._ramp_time = self._time
+        self._ramped_production = self._ramp(self._ramped_production, sp.production_rate, nominal.production_sp_rate_limit, dt)
+        self._ramped_pct_g = self._ramp(self._ramped_pct_g, sp.pct_g, nominal.pct_g_sp_rate_limit, dt)
+
         # 1. Production index Fp = base + feedback adjustment (slow outer trim).
-        fp_adj = self._update(reg.production, sp.production_rate, meas)
+        fp_adj = self._update(reg.production, self._ramped_production, meas)
         fp = nominal.fp_base + fp_adj
         if self.enable_overrides:
             fp, overrides_active = self._apply_pressure_override(fp, meas, overrides_active)
@@ -179,9 +201,9 @@ class RickerMultiLoopController:
 
         # 2. Composition feedforward + feedback (-> feed ratios r1..r4).
         if self.enable_composition:
-            eadj = self._update(reg.pct_g, sp.pct_g, meas) if self.enable_pct_g_feedback else nominal.eadj0
-            r2 = float(np.polyval(nominal.p2_coeffs, sp.pct_g)) - nominal.ff_gain_d * eadj * fp
-            r3 = float(np.polyval(nominal.p3_coeffs, sp.pct_g)) + nominal.ff_gain_e * eadj * fp
+            eadj = self._update(reg.pct_g, self._ramped_pct_g, meas) if self.enable_pct_g_feedback else nominal.eadj0
+            r2 = float(np.polyval(nominal.p2_coeffs, self._ramped_pct_g)) - nominal.ff_gain_d * eadj * fp
+            r3 = float(np.polyval(nominal.p3_coeffs, self._ramped_pct_g)) + nominal.ff_gain_e * eadj * fp
             ya = _yA(meas, self._a_idx, self._c_idx)
             yac = float(meas[self._a_idx]) + float(meas[self._c_idx])
             d_ya = self._update_velocity(reg.ya, sp.ya, ya)
