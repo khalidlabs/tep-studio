@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from cffi import FFI
@@ -247,7 +248,10 @@ void tep_get_model_bytes(TEPHandle *handle, char *buffer);
 void tep_set_model_bytes(TEPHandle *handle, const char *buffer);
 """
 )
-ffibuilder.set_source("tep_studio.simulation._tep_native", _kernel_source(), libraries=["m"])
+# Link libm on Unix; on Windows (MSVC) the math functions are in the C runtime and
+# there is no separate `m.lib`, so linking it fails with LNK1181.
+_libraries = [] if sys.platform == "win32" else ["m"]
+ffibuilder.set_source("tep_studio.simulation._tep_native", _kernel_source(), libraries=_libraries)
 
 
 if __name__ == "__main__":
