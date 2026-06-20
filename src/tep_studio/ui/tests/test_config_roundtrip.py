@@ -40,7 +40,7 @@ def test_resolved_record_every() -> None:
     "patch",
     [
         {"loop_type": "sideways"},
-        {"mode": "mode3"},
+        {"mode": "mode7"},
         {"horizon": 0.0},
         {"disturbances": [{"idv": "idv_99"}]},
         {"disturbances": [{"idv": "idv_01", "magnitude": 5.0}]},

@@ -73,8 +73,8 @@ class ScenarioConfig:
         errors: list[str] = []
         if self.loop_type not in ("open", "closed"):
             errors.append(f"loop_type must be 'open' or 'closed', got {self.loop_type!r}")
-        if self.mode != "mode1":
-            errors.append("only mode='mode1' is supported by the core")
+        if self.mode not in ("mode1", "mode2", "mode3", "mode4", "mode5", "mode6"):
+            errors.append(f"mode must be one of mode1..mode6, got {self.mode!r}")
         if self.horizon <= 0:
             errors.append("horizon must be > 0")
         if self.control_interval <= 0:

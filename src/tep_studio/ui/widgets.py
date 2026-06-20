@@ -24,6 +24,15 @@ DEFAULT_PLOT_VARS = [
 ]
 
 
+def mode_options() -> list[dict]:
+    from tep_studio.simulation.modes import MODES
+
+    options = []
+    for info in MODES:
+        options.append({"label": f"{info.label} — {info.product_mix} G:H, {info.production} rate", "value": info.key})
+    return options
+
+
 def disturbance_options() -> list[dict]:
     return [
         {"label": f"{name} — {TEP_SCHEMA.variable('disturbances', name).description}", "value": name}

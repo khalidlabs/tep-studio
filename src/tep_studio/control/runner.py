@@ -67,6 +67,7 @@ class ClosedLoopSimulation:
         self,
         *,
         seed: float | None = None,
+        mode: str = "mode1",
         disturbances: ArrayLike | None = None,
         disturbance_schedule: DisturbanceSchedule | None = None,
         setpoint_schedule: SetpointSchedule | None = None,
@@ -88,7 +89,7 @@ class ClosedLoopSimulation:
             A :class:`ClosedLoopResult`; ``.stabilized`` is True when the horizon was
             reached without a plant shutdown.
         """
-        meas, _ = self.sim.reset(mode="mode1", seed=seed)
+        meas, _ = self.sim.reset(mode=mode, seed=seed)
         self.controller.reset(meas, time=self.sim.time)
         # Metrics are seeded from the INITIAL setpoints; for a setpoint step test that
         # means post-step IAE measures the excursion against the pre-step reference.

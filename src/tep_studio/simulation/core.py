@@ -91,10 +91,11 @@ class TennesseeEastmanProcess:
             (hours), ``constraint_margins``, ``shutdown_status``, ``objective_terms`` and
             the applied ``disturbances``.
         """
-        if mode != "mode1":
-            raise NotImplementedError(
-                "Only Mode 1 initial conditions are supported; pass an explicit initial_state for another operating point."
-            )
+        valid_modes = ("mode1", "mode2", "mode3", "mode4", "mode5", "mode6")
+        if mode not in valid_modes:
+            raise NotImplementedError(f"Unknown mode {mode!r}; expected one of {valid_modes} or an explicit initial_state.")
+        # All modes start from the base steady state; an operating mode is realised by the
+        # controller's setpoints, not by a distinct initial condition.
         if ms_flag is not None:
             self.ms_flag = int(ms_flag)
         self.state = self.kernel.reset(initial_state=initial_state, seed=seed, ms_flag=self.ms_flag)
