@@ -1,0 +1,41 @@
+# Keep the build context lean, but NEVER exclude files the CFFI build needs:
+# src/, temexd_mod/, setup.py, pyproject.toml, MANIFEST.in must all reach the image.
+
+# VCS / IDE / OS cruft
+.git
+.github
+.DS_Store
+**/.DS_Store
+.vscode
+.idea
+
+# Python build/runtime caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+**/*.egg-info/
+
+# Prebuilt native artifacts — force a clean recompile inside the image
+**/_tep_native*.so
+**/_tep_native*.pyd
+**/_tep_native*.c
+
+# Local build outputs / docs site / research scratch (not needed at runtime/build)
+build/
+dist/
+site/
+docs/
+research/
+validation_outputs/
+**/validation_outputs/
+
+# Environments
+.venv/
+venv/
+env/
