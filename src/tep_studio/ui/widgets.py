@@ -10,6 +10,7 @@ from __future__ import annotations
 from dash import dcc, html
 
 from tep_studio.simulation.schema import TEP_SCHEMA
+from tep_studio.ui import theme
 from tep_studio.ui.config import setpoint_fields
 from tep_studio.ui.service import default_manual_mvs, default_setpoints
 
@@ -57,14 +58,14 @@ def mv_sliders() -> list:
         rows.append(
             html.Div(
                 [
-                    html.Label(name, title=var.description, style={"fontSize": "12px", "display": "block"}),
+                    html.Label(name, title=var.description, style={"fontSize": theme.FS_SM, "display": "block"}),
                     dcc.Slider(
                         min=0, max=100, value=round(float(values[name]), 1),
                         id={"type": "mv-slider", "name": name},
                         marks=None, tooltip={"placement": "bottom", "always_visible": False},
                     ),
                 ],
-                style={"marginBottom": "2px"},
+                style={"marginBottom": theme.SP_1},
             )
         )
     return rows
@@ -77,14 +78,14 @@ def setpoint_inputs() -> list:
         rows.append(
             html.Div(
                 [
-                    html.Label(field, style={"fontSize": "12px", "width": "150px", "display": "inline-block"}),
+                    html.Label(field, style={"fontSize": theme.FS_SM, "width": "150px", "display": "inline-block"}),
                     dcc.Input(
                         type="number", value=round(float(values[field]), 3),
                         id={"type": "sp-input", "name": field},
-                        debounce=True, style={"width": "120px"},
+                        debounce=True, className="tep-input", style={"width": "120px"},
                     ),
                 ],
-                style={"marginBottom": "3px"},
+                style={"marginBottom": theme.SP_1},
             )
         )
     return rows

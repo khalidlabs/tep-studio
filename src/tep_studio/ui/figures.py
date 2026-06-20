@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from tep_studio.simulation.schema import TEP_SCHEMA
+from tep_studio.ui import theme
 
 # Constraint limits per measurement column (mirrors core._constraint_margins).
 LIMIT_LINES: dict[str, list[tuple[float, str]]] = {
@@ -33,9 +34,10 @@ SETPOINT_FIELD: dict[str, str] = {
     "measurement.stripper_level": "stripper_level",
     "measurement.stripper_underflow": "production_rate",
 }
-_BLUE = "#1f77b4"
-_RED = "#b22222"
-_PALETTE = ["#1f77b4", "#2f6f4e", "#d2691e", "#7b3fa0", "#c2185b", "#00838f", "#555555"]
+# Sourced from the central theme so app chrome and plots share one palette.
+_BLUE = theme.BLUE
+_RED = theme.RED
+_PALETTE = theme.PALETTE
 
 
 def _label(column: str) -> tuple[str, str]:
@@ -60,7 +62,7 @@ def _style(fig: go.Figure, uirevision=None) -> go.Figure:
     # uirevision keyed on the RUN (not a constant): a new run rescales the axes to
     # the new data, while re-plotting the same run preserves the user's zoom/pan.
     fig.update_layout(
-        template="plotly_white",
+        template="tep",
         margin=dict(l=60, r=20, t=50, b=50),
         paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -131,6 +133,33 @@ def compare_overlay(runs: Sequence, column: str, *, max_points: int = 3000, uire
     for value, name in LIMIT_LINES.get(column, []):
         fig.add_hline(y=value, line_dash="dash", line_color=_RED, annotation_text=name)
     fig.update_layout(title=f"Compare: {title}", xaxis_title="Time (h)", yaxis_title=unit)
+    return _style(fig, uirevision)
+
+
+def compare_overlay_multi(runs: Sequence, columns: Sequence[str], *, max_points: int = 3000, uirevision: str | None = None) -> go.Figure:
+    """Overlay several variables (one stacked panel each) across several RunResults.
+
+    Color encodes the run (consistent across panels); each variable gets its own row.
+    The single-variable :func:`compare_overlay` is kept for the 1-variable case.
+    """
+    cols = [c if c.startswith(("measurement.", "state.", "implemented_action.")) else f"measurement.{c}" for c in columns]
+    titles = [f"{_label(c)[0]} ({_label(c)[1]})" if _label(c)[1] else _label(c)[0] for c in cols]
+    fig = make_subplots(rows=max(1, len(cols)), cols=1, shared_xaxes=True, subplot_titles=titles, vertical_spacing=0.08)
+    frames = [_thin(run.to_frame(), max_points) for run in runs]
+    for r, column in enumerate(cols, start=1):
+        for i, (run, frame) in enumerate(zip(runs, frames)):
+            if column not in frame.columns:
+                continue
+            label = run.scenario.name or run.run_id
+            # One legend entry per run (on the first panel only) to avoid duplicates.
+            fig.add_trace(
+                go.Scatter(x=frame["time"], y=frame[column], mode="lines", line=dict(width=1.5, color=_PALETTE[i % len(_PALETTE)]), name=label, legendgroup=label, showlegend=(r == 1)),
+                row=r,
+                col=1,
+            )
+        for value, _name in LIMIT_LINES.get(column, []):
+            fig.add_hline(y=value, line_dash="dash", line_color=_RED, line_width=1, row=r, col=1)
+    fig.update_xaxes(title_text="Time (h)", row=len(cols), col=1)
     return _style(fig, uirevision)
 
 

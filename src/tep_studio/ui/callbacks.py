@@ -2,7 +2,8 @@
 
 All heavy work is delegated to ``tep_studio.ui.service`` (Dash-free). Runs are
 stored in a server-side ``RunStore``; the browser session keeps only small run
-summaries. Imports Dash (used only by the app).
+summaries. Service calls are wrapped so a failed run surfaces a red banner instead
+of a silent server-log traceback. Imports Dash (used only by the app).
 """
 
 from __future__ import annotations
@@ -15,13 +16,13 @@ from dash import ALL, Input, Output, State, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
 from tep_studio.simulation.schema import TEP_SCHEMA
-from tep_studio.ui import figures, service
+from tep_studio.ui import figures, service, theme
 from tep_studio.ui.config import BatchSpec, DisturbanceActivation, ScenarioConfig, StepTestSpec
 from tep_studio.ui.service import default_manual_mvs, default_setpoints
 from tep_studio.ui.widgets import DEFAULT_PLOT_VARS, mv_target_options, setpoint_target_options
 
-_SHOW = {"border": "1px solid #ddd", "borderRadius": "6px", "padding": "12px", "marginBottom": "12px", "display": "block"}
-_HIDE = {"display": "none"}
+_SHOW = {**theme.CARD, "display": "block"}
+_HIDE = theme.HIDDEN
 
 SETPOINT_TO_MEAS = {
     "reactor_level": "measurement.reactor_level",
@@ -47,8 +48,8 @@ MV_TO_MEAS = {
 
 def _empty(message: str = "Run a simulation to see results") -> go.Figure:
     fig = go.Figure()
-    fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color="#999"))
-    fig.update_layout(template="plotly_white", xaxis_visible=False, yaxis_visible=False, margin=dict(l=20, r=20, t=20, b=20))
+    fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color=theme.TEXT_FAINT))
+    fig.update_layout(template="tep", xaxis_visible=False, yaxis_visible=False, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
 
@@ -62,12 +63,47 @@ def _parse_seed(seed):
     return None if seed in (None, "") else float(seed)
 
 
-def _scenario(loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_ids, dist_select, dist_start, name="scenario") -> ScenarioConfig:
+def _num(value, default):
+    return default if value in (None, "") else float(value)
+
+
+def _fmt(value, ndigits: int = 3):
+    if value is None:
+        return "—"
+    try:
+        return round(float(value), ndigits)
+    except (TypeError, ValueError):
+        return value
+
+
+def _level_margin(peak: dict, name: str):
+    lo, hi = peak.get(f"{name}_min"), peak.get(f"{name}_max")
+    if lo is None or hi is None:
+        return None
+    return round(min(float(lo), 100.0 - float(hi)), 1)
+
+
+def _metric_card(label: str, value) -> html.Div:
+    return html.Div(
+        [
+            html.Div(label, style={"fontSize": theme.FS_XS, "color": theme.TEXT_MUTED}),
+            html.Div(str(value), style={"fontSize": theme.FS_LG, "fontWeight": "700", "color": theme.TITLE}),
+        ],
+        style={"border": f"1px solid {theme.BORDER}", "borderRadius": theme.RADIUS_SM, "padding": "8px 10px", "minWidth": "118px", "backgroundColor": theme.SURFACE_ALT},
+    )
+
+
+def _scenario(
+    loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_ids, dist_select, dist_start, name="scenario",
+    dist_mags=None, dist_mag_ids=None, solver_method="RK4", rtol=1e-6, atol=1e-8, fixed_step=0.0005, record_every=0,
+) -> ScenarioConfig:
     flags = flags or []
     setpoints = {i["name"]: float(v) for i, v in zip(sp_ids, sp_values) if v is not None} or None
     manual_mvs = {i["name"]: float(v) for i, v in zip(mv_ids, mv_values) if v is not None} or None
+    mag_by_name = {i["name"]: float(v) for i, v in zip(dist_mag_ids or [], dist_mags or []) if v is not None}
     disturbances = tuple(
-        DisturbanceActivation(idv=name_, magnitude=1.0, start_time=float(dist_start or 0.0)) for name_ in (dist_select or [])
+        DisturbanceActivation(idv=name_, magnitude=mag_by_name.get(name_, 1.0), start_time=float(dist_start or 0.0))
+        for name_ in (dist_select or [])
     )
     return ScenarioConfig(
         name=name,
@@ -81,10 +117,18 @@ def _scenario(loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_i
         enable_composition="composition" in flags,
         enable_overrides="overrides" in flags,
         enable_pct_g_feedback="pct_g_feedback" in flags,
+        solver_method=solver_method or "RK4",
+        rtol=_num(rtol, 1e-6),
+        atol=_num(atol, 1e-8),
+        fixed_step=_num(fixed_step, 0.0005),
+        record_every=int(_num(record_every, 0)),
     )
 
 
-# Shared State lists for the simulate-tab configuration form.
+# Shared State lists for the simulate-tab configuration form. The trailing block
+# (idv-mag pattern + solver/record fields) is read by run_simulation and
+# save_scenario; _scenario receives them by keyword so the positional contract
+# (pinned by test_app_smoke) is unchanged.
 _SIM_STATE = [
     State("loop-type", "value"),
     State("horizon", "value"),
@@ -97,6 +141,13 @@ _SIM_STATE = [
     State({"type": "mv-slider", "name": ALL}, "id"),
     State("dist-select", "value"),
     State("dist-start", "value"),
+    State({"type": "idv-mag", "name": ALL}, "value"),
+    State({"type": "idv-mag", "name": ALL}, "id"),
+    State("solver-method", "value"),
+    State("rtol", "value"),
+    State("atol", "value"),
+    State("fixed-step", "value"),
+    State("record-every", "value"),
 ]
 
 
@@ -106,24 +157,53 @@ def register_callbacks(app, store) -> None:
     def _toggle(loop):
         return (_HIDE, _SHOW) if loop == "open" else (_SHOW, _HIDE)
 
+    # -- render a magnitude input per selected disturbance ----------------
+    @app.callback(Output("dist-mag-container", "children"), Input("dist-select", "value"))
+    def _render_idv_mags(selected):
+        selected = selected or []
+        if not selected:
+            return []
+        rows = [html.Div("Disturbance magnitude (0–1)", style={"fontSize": theme.FS_SM, "fontWeight": "600", "marginBottom": theme.SP_1})]
+        for name_ in selected:
+            rows.append(
+                html.Div(
+                    [
+                        html.Label(name_, style={"fontSize": theme.FS_SM, "width": "90px", "display": "inline-block"}),
+                        dcc.Input(type="number", min=0, max=1, step=0.05, value=1.0, id={"type": "idv-mag", "name": name_}, className="tep-input", style={"width": "90px"}),
+                    ],
+                    style={"marginBottom": theme.SP_1},
+                )
+            )
+        return rows
+
     # -- run a simulation -------------------------------------------------
     @app.callback(
         Output("active-run", "data", allow_duplicate=True),
         Output("session-runs", "data", allow_duplicate=True),
         Output("run-status", "children"),
+        Output("run-banner", "style"),
+        Output("run-banner", "children"),
+        Output("run-btn", "disabled", allow_duplicate=True),
         Input("run-btn", "n_clicks"),
         *_SIM_STATE,
         State("session-runs", "data"),
         prevent_initial_call=True,
     )
-    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, session):
-        cfg = _scenario(loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name=f"{loop}_run")
-        run = service.run_scenario(cfg)
-        store.put(run)
-        session = (session or []) + [run.summary()]
-        outcome = f"shutdown at {run.final_time:.2f} h" if run.terminated else f"ran {run.final_time:.1f} h"
-        status = f"{outcome} · peak reactor P = {run.peak.get('reactor_pressure_max', 0):.0f} kPa · run {run.run_id}"
-        return run.run_id, session, status
+    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, session):
+        try:
+            cfg = _scenario(
+                loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name=f"{loop}_run",
+                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+            )
+            cfg.validate()
+            run = service.run_scenario(cfg)
+            store.put(run)
+            session = (session or []) + [run.summary()]
+            outcome = f"shutdown at {run.final_time:.2f} h" if run.terminated else f"ran {run.final_time:.1f} h"
+            status = f"{outcome} · peak reactor P = {run.peak.get('reactor_pressure_max', 0):.0f} kPa · run {run.run_id}"
+            return run.run_id, session, status, theme.HIDDEN, "", False
+        except Exception as exc:  # surface the failure instead of a silent server-log traceback
+            return no_update, no_update, "", theme.banner_style("danger"), f"Run failed — {exc}", False
 
     # -- render the simulate plots from the stored run --------------------
     @app.callback(
@@ -136,7 +216,7 @@ def register_callbacks(app, store) -> None:
     def render_simulate(run_id, plot_vars, toggles):
         run = store.get(run_id) if run_id else None
         if run is None:
-            return _empty(), _empty()
+            return _empty("Run a simulation to see trajectories"), _empty("Manipulated variables appear after a run")
         frame = run.to_frame()
         toggles = toggles or []
         setpoints = (run.record or {}).get("setpoints")
@@ -165,6 +245,9 @@ def register_callbacks(app, store) -> None:
         Output("session-runs", "data", allow_duplicate=True),
         Output("step-graph", "figure"),
         Output("step-status", "children"),
+        Output("step-banner", "style"),
+        Output("step-banner", "children"),
+        Output("run-step-btn", "disabled", allow_duplicate=True),
         Input("run-step-btn", "n_clicks"),
         State("step-kind", "value"),
         State("step-target", "value"),
@@ -177,29 +260,33 @@ def register_callbacks(app, store) -> None:
         prevent_initial_call=True,
     )
     def run_step(n, kind, target, baseline, step_value, step_time, horizon, ci, session):
-        spec = StepTestSpec(kind=kind, target=target, baseline=float(baseline), step_value=float(step_value), step_time=float(step_time))
-        cfg = ScenarioConfig(
-            name=f"step_{target}",
-            loop_type="open" if kind == "mv" else "closed",
-            horizon=float(horizon or 6.0),
-            control_interval=float(ci),
-            step_test=spec,
-        )
-        run = service.run_scenario(cfg)
-        store.put(run)
-        session = (session or []) + [run.summary()]
-        frame = run.to_frame()
-        if kind == "mv":
-            drive_col = f"implemented_action.{target}"
-            response = MV_TO_MEAS.get(target, "measurement.reactor_pressure")
-        else:
-            frame = frame.copy()
-            frame["drive.setpoint"] = [float(step_value) if t >= float(step_time) else float(baseline) for t in frame["time"]]
-            drive_col = "drive.setpoint"
-            response = SETPOINT_TO_MEAS.get(target, "measurement.reactor_pressure")
-        fig = figures.step_response(frame, response, drive_col, float(step_time))
-        status = f"{'shutdown at %.2f h' % run.final_time if run.terminated else 'ran %.1f h' % run.final_time} · run {run.run_id}"
-        return run.run_id, session, fig, status
+        try:
+            spec = StepTestSpec(kind=kind, target=target, baseline=float(baseline), step_value=float(step_value), step_time=float(step_time))
+            cfg = ScenarioConfig(
+                name=f"step_{target}",
+                loop_type="open" if kind == "mv" else "closed",
+                horizon=float(horizon or 6.0),
+                control_interval=float(ci),
+                step_test=spec,
+            )
+            cfg.validate()
+            run = service.run_scenario(cfg)
+            store.put(run)
+            session = (session or []) + [run.summary()]
+            frame = run.to_frame()
+            if kind == "mv":
+                drive_col = f"implemented_action.{target}"
+                response = MV_TO_MEAS.get(target, "measurement.reactor_pressure")
+            else:
+                frame = frame.copy()
+                frame["drive.setpoint"] = [float(step_value) if t >= float(step_time) else float(baseline) for t in frame["time"]]
+                drive_col = "drive.setpoint"
+                response = SETPOINT_TO_MEAS.get(target, "measurement.reactor_pressure")
+            fig = figures.step_response(frame, response, drive_col, float(step_time))
+            status = f"{'shutdown at %.2f h' % run.final_time if run.terminated else 'ran %.1f h' % run.final_time} · run {run.run_id}"
+            return run.run_id, session, fig, status, theme.HIDDEN, "", False
+        except Exception as exc:
+            return no_update, no_update, no_update, "", theme.banner_style("danger"), f"Step test failed — {exc}", False
 
     # -- keep run-derived lists in sync with the session ------------------
     @app.callback(
@@ -212,8 +299,25 @@ def register_callbacks(app, store) -> None:
     def _update_run_lists(session):
         session = session or []
         options = [{"label": f"{s['name']} ({s['run_id']})", "value": s["run_id"]} for s in session]
-        columns = [{"name": k, "id": k} for k in ("run_id", "name", "loop_type", "terminated", "final_time", "peak_reactor_pressure", "iae_reactor_pressure")]
+        keys = ("run_id", "name", "loop_type", "terminated", "final_time", "peak_reactor_pressure", "iae_reactor_pressure", "ise_reactor_pressure", "time_to_shutdown")
+        columns = [{"name": k, "id": k} for k in keys]
         return options, session, columns, options
+
+    # -- RunStore capacity / eviction indicator ---------------------------
+    @app.callback(Output("store-capacity", "children"), Output("store-capacity", "style"), Input("session-runs", "data"))
+    def _capacity(session):
+        used, cap = len(store.ids()), store.capacity
+        msg, kind = f"RunStore: {used}/{cap} runs cached", "muted"
+        if used >= cap:
+            msg, kind = msg + " — oldest runs are being evicted (LRU)", "danger"
+        elif used >= 0.8 * cap:
+            kind = "warning"
+        return msg, theme.status_style(kind)
+
+    # -- copy all run ids -------------------------------------------------
+    @app.callback(Output("copy-runids", "content"), Input("session-runs", "data"))
+    def _copy_runids(session):
+        return "\n".join(s["run_id"] for s in (session or []))
 
     @app.callback(Output("session-runs", "data", allow_duplicate=True), Input("clear-runs-btn", "n_clicks"), prevent_initial_call=True)
     def _clear_runs(n):
@@ -242,6 +346,9 @@ def register_callbacks(app, store) -> None:
         Output("batch-status", "children"),
         Output("batch-store", "data"),
         Output("session-runs", "data", allow_duplicate=True),
+        Output("batch-banner", "style"),
+        Output("batch-banner", "children"),
+        Output("run-batch-btn", "disabled", allow_duplicate=True),
         Input("run-batch-btn", "n_clicks"),
         State("loop-type", "value"),
         State("horizon", "value"),
@@ -251,23 +358,36 @@ def register_callbacks(app, store) -> None:
         State({"type": "sp-input", "name": ALL}, "id"),
         State("dist-select", "value"),
         State("dist-start", "value"),
+        State({"type": "idv-mag", "name": ALL}, "value"),
+        State({"type": "idv-mag", "name": ALL}, "id"),
+        State("solver-method", "value"),
+        State("rtol", "value"),
+        State("atol", "value"),
+        State("fixed-step", "value"),
+        State("record-every", "value"),
         State("batch-seeds", "value"),
         State("batch-field", "value"),
         State("batch-values", "value"),
         State("session-runs", "data"),
         prevent_initial_call=True,
     )
-    def run_batch(n, loop, horizon, ci, flags, sp_v, sp_id, dist, dist_start, seeds_text, field, values_text, session):
-        base = _scenario(loop, horizon, ci, None, flags, sp_v, sp_id, [], [], dist, dist_start, name="batch")
-        param_grid = {field: tuple(_floats(values_text))} if field and values_text else {}
-        spec = BatchSpec(base=base, seeds=tuple(_floats(seeds_text)), param_grid=param_grid, label="batch")
-        batch, runs = service.run_batch(spec)
-        for run in runs:
-            store.put(run)
-        session = (session or []) + [run.summary() for run in runs]
-        rows = batch.per_run_metrics
-        columns = [{"name": k, "id": k} for k in rows[0]] if rows else []
-        return rows, columns, f"ran {len(runs)} scenarios", {"run_ids": list(batch.run_ids)}, session
+    def run_batch(n, loop, horizon, ci, flags, sp_v, sp_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, seeds_text, field, values_text, session):
+        try:
+            base = _scenario(
+                loop, horizon, ci, None, flags, sp_v, sp_id, [], [], dist, dist_start, name="batch",
+                dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+            )
+            param_grid = {field: tuple(_floats(values_text))} if field and values_text else {}
+            spec = BatchSpec(base=base, seeds=tuple(_floats(seeds_text)), param_grid=param_grid, label="batch")
+            batch, runs = service.run_batch(spec)
+            for run in runs:
+                store.put(run)
+            session = (session or []) + [run.summary() for run in runs]
+            rows = batch.per_run_metrics
+            columns = [{"name": k, "id": k} for k in rows[0]] if rows else []
+            return rows, columns, f"ran {len(runs)} scenarios", {"run_ids": list(batch.run_ids)}, session, theme.HIDDEN, "", False
+        except Exception as exc:
+            return no_update, no_update, "", no_update, no_update, theme.banner_style("danger"), f"Batch failed — {exc}", False
 
     @app.callback(
         Output("batch-dataset-download", "data"),
@@ -294,37 +414,60 @@ def register_callbacks(app, store) -> None:
 
     # -- compare overlay --------------------------------------------------
     @app.callback(Output("compare-graph", "figure"), Input("compare-var", "value"), Input("session-runs", "data"))
-    def render_compare(variable, session):
+    def render_compare(variables, session):
         session = session or []
         runs = [store.get(s["run_id"]) for s in session]
         runs = [r for r in runs if r is not None]
         if not runs:
             return _empty("Run simulations, then compare them here")
-        return figures.compare_overlay(runs, variable or "measurement.reactor_pressure")
+        vars_ = variables if isinstance(variables, list) else [variables]
+        vars_ = [v for v in vars_ if v] or ["measurement.reactor_pressure"]
+        if len(vars_) == 1:
+            return figures.compare_overlay(runs, vars_[0])
+        return figures.compare_overlay_multi(runs, vars_)
 
     # -- metrics & experiment record --------------------------------------
-    @app.callback(Output("metrics-panel", "children"), Output("record-json", "children"), Input("record-run", "value"), Input("active-run", "data"))
+    @app.callback(
+        Output("metrics-panel", "children"),
+        Output("record-json", "children"),
+        Output("copy-active-id", "content"),
+        Input("record-run", "value"),
+        Input("active-run", "data"),
+    )
     def render_record(picked, active):
         run = store.get(picked or active) if (picked or active) else None
         if run is None:
-            return "No run selected.", ""
-        metrics = run.metrics
-        rows = [
-            ("terminated", run.terminated),
-            ("final_time_h", round(run.final_time, 3)),
-            ("peak_reactor_pressure_kPa", round(run.peak.get("reactor_pressure_max", float("nan")), 1)),
-            ("constraint_violation_steps", metrics.get("constraint_violation_steps")),
-            ("operating_cost_total", round(metrics.get("operating_cost_total", 0.0), 2)),
-            ("production_rate_mean", round(metrics.get("production_rate_mean", 0.0), 2)),
+            return "No run selected.", "", ""
+        metrics = run.metrics if isinstance(run.metrics, dict) else {}
+        peak_p = run.peak.get("reactor_pressure_max", float("nan"))
+        cards = [
+            _metric_card("terminated", run.terminated),
+            _metric_card("final time (h)", round(run.final_time, 3)),
+            _metric_card("time to shutdown (h)", _fmt(metrics.get("time_to_shutdown"))),
+            _metric_card("peak reactor P (kPa)", round(peak_p, 1)),
+            _metric_card("pressure margin (kPa)", round(3000.0 - peak_p, 1)),
+            _metric_card("violation steps", metrics.get("constraint_violation_steps")),
+            _metric_card("operating cost", round(metrics.get("operating_cost_total", 0.0), 2)),
+            _metric_card("production mean", round(metrics.get("production_rate_mean", 0.0), 2)),
         ]
-        for cv, value in (metrics.get("iae") or {}).items():
-            rows.append((f"IAE.{cv}", round(value, 3)))
-        table = html.Table(
-            [html.Tr([html.Td(k, style={"fontWeight": "600", "paddingRight": "16px"}), html.Td(str(v))]) for k, v in rows],
-            style={"fontSize": "13px"},
-        )
+        for level in ("reactor_level", "separator_level", "stripper_level"):
+            margin = _level_margin(run.peak, level)
+            if margin is not None:
+                cards.append(_metric_card(f"{level} margin", margin))
+        # Per-CV IAE / ISE comparison table.
+        iae, ise = metrics.get("iae") or {}, metrics.get("ise") or {}
+        cvs = sorted(set(iae) | set(ise))
+        err_table = html.Table(
+            [html.Tr([html.Th("controlled variable"), html.Th("IAE"), html.Th("ISE")], style={"textAlign": "left"})]
+            + [html.Tr([html.Td(cv, style={"paddingRight": "16px"}), html.Td(_fmt(iae.get(cv))), html.Td(_fmt(ise.get(cv)))]) for cv in cvs],
+            style={"fontSize": theme.FS_MD, "marginTop": theme.SP_3, "borderCollapse": "collapse"},
+        ) if cvs else None
+        panel = html.Div([
+            html.Div(cards, style={"display": "flex", "flexWrap": "wrap", "gap": theme.SP_2}),
+            err_table or html.Div(),
+        ])
         record_json = json.dumps(run.record, indent=2) if run.record else "(open-loop run — no experiment record)"
-        return table, record_json
+        return panel, record_json, run.run_id
 
     @app.callback(Output("record-download", "data"), Input("download-record-btn", "n_clicks"), State("record-run", "value"), State("active-run", "data"), prevent_initial_call=True)
     def download_record(n, picked, active):
@@ -335,8 +478,11 @@ def register_callbacks(app, store) -> None:
 
     # -- scenario save / load --------------------------------------------
     @app.callback(Output("scenario-download", "data"), Input("save-scenario-btn", "n_clicks"), *_SIM_STATE, prevent_initial_call=True)
-    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start):
-        cfg = _scenario(loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name="scenario")
+    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every):
+        cfg = _scenario(
+            loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name="scenario",
+            dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every,
+        )
         return dcc.send_string(cfg.to_json(), f"{cfg.name}.json")
 
     @app.callback(
@@ -347,6 +493,11 @@ def register_callbacks(app, store) -> None:
         Output("ctrl-flags", "value"),
         Output("dist-select", "value"),
         Output("dist-start", "value"),
+        Output("solver-method", "value"),
+        Output("rtol", "value"),
+        Output("atol", "value"),
+        Output("fixed-step", "value"),
+        Output("record-every", "value"),
         Output({"type": "sp-input", "name": ALL}, "value"),
         Output({"type": "mv-slider", "name": ALL}, "value"),
         Input("scenario-upload", "contents"),
@@ -367,4 +518,19 @@ def register_callbacks(app, store) -> None:
         merged_mv = {**default_manual_mvs(), **(cfg.manual_mvs or {})}
         sp_values = [round(float(merged_sp[i["name"]]), 3) for i in sp_ids]
         mv_values = [round(float(merged_mv[i["name"]]), 1) for i in mv_ids]
-        return cfg.loop_type, cfg.horizon, ci, cfg.seed, flags, dist_names, dist_start, sp_values, mv_values
+        # Note: per-disturbance magnitudes reset to 1.0 on load (the idv-mag inputs
+        # are created only after dist-select updates); full round-trip is a follow-up.
+        return (
+            cfg.loop_type, cfg.horizon, ci, cfg.seed, flags, dist_names, dist_start,
+            cfg.solver_method, cfg.rtol, cfg.atol, cfg.fixed_step, cfg.record_every,
+            sp_values, mv_values,
+        )
+
+    # -- disable the Run buttons while a synchronous run is in flight -----
+    for _btn in ("run-btn", "run-step-btn", "run-batch-btn"):
+        app.clientside_callback(
+            "function(n){ return !!n; }",
+            Output(_btn, "disabled", allow_duplicate=True),
+            Input(_btn, "n_clicks"),
+            prevent_initial_call=True,
+        )
