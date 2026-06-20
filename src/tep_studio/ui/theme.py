@@ -26,12 +26,12 @@ TITLE = "#111827"  # headings
 TEXT_MUTED = "#6b7280"
 TEXT_FAINT = "#9ca3af"
 
-# -- single accent (interactive states only) ------------------------------
-PRIMARY = "#4f46e5"
-PRIMARY_HOVER = "#4338ca"
-PRIMARY_ACTIVE = "#3730a3"
-PRIMARY_SOFT = "#eef2ff"  # the accent at low intensity (selected/hover tint)
-FOCUS_RING = "rgba(79,70,229,0.35)"
+# -- single accent (interactive states only): slate grey ------------------
+PRIMARY = "#334155"
+PRIMARY_HOVER = "#1e293b"
+PRIMARY_ACTIVE = "#0f172a"
+PRIMARY_SOFT = "#f1f5f9"  # the accent at low intensity (selected/hover tint)
+FOCUS_RING = "rgba(51,65,85,0.35)"
 
 # -- semantic feedback (banners only; not decoration) ---------------------
 SUCCESS = "#15803d"

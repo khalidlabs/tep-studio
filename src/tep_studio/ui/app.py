@@ -28,8 +28,8 @@ _INDEX_STRING = """<!DOCTYPE html>
             :root{
                 --bg:#f6f7f9; --surface:#fff; --surface-alt:#f3f4f6; --border:#e5e7eb;
                 --border-strong:#d1d5db; --text:#1f2937; --title:#111827; --muted:#6b7280;
-                --faint:#9ca3af; --primary:#4f46e5; --primary-hover:#4338ca; --primary-active:#3730a3;
-                --primary-soft:#eef2ff; --focus:rgba(79,70,229,0.35);
+                --faint:#9ca3af; --primary:#334155; --primary-hover:#1e293b; --primary-active:#0f172a;
+                --primary-soft:#f1f5f9; --focus:rgba(51,65,85,0.35);
                 --radius:10px; --radius-sm:6px; --ch:34px;
             }
             html, body { margin:0; padding:0; min-height:100vh; color:var(--text);
@@ -69,8 +69,8 @@ _INDEX_STRING = """<!DOCTYPE html>
             .is-focused:not(.is-open) > .Select-control{ border-color:var(--primary) !important;
                 box-shadow:0 0 0 3px var(--focus) !important; }
             .Select--multi .Select-value{ background:var(--primary-soft) !important; color:var(--primary) !important;
-                border:1px solid #c7d2fe !important; border-radius:4px !important; }
-            .Select--multi .Select-value-icon{ border-right-color:#c7d2fe !important; }
+                border:1px solid #cbd5e1 !important; border-radius:4px !important; }
+            .Select--multi .Select-value-icon{ border-right-color:#cbd5e1 !important; }
 
             /* Buttons: flat, single accent; primary is the strongest element */
             .tep-btn{ height:var(--ch); padding:0 14px; border:1px solid transparent; border-radius:var(--radius-sm);
