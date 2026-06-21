@@ -50,6 +50,7 @@ nav:
   - Interface (Studio): ui.md
   - LLM / Agents: agent.md
   - Validation: validation.md
+  - History & Lineage: history.md
   - Comparison: comparison.md
   - Troubleshooting: troubleshooting.md
   - Development: development.md
