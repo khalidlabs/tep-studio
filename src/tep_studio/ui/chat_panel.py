@@ -40,11 +40,38 @@ _ASSISTANT_BUBBLE = {
 _ERR_BUBBLE = {**_ASSISTANT_BUBBLE, "background": "#fef2f2", "color": theme.DANGER}
 
 
+def _hint_div() -> html.Div:
+    """The initial placeholder; reused by 'New chat' to restore a clean transcript."""
+    return html.Div(_HINT, id="chat-hint", style={"color": theme.TEXT_MUTED, "fontSize": theme.FS_SM})
+
+
 def chat_tab() -> html.Div:
     return html.Div(
         [
             dcc.Store(id="chat-history", data=[]),
-            html.H4("Assistant", style={"marginTop": 0}),
+            dcc.Store(id="chat-scroll-dummy"),
+            html.Div(
+                [
+                    html.H4("Assistant", style={"margin": 0}),
+                    html.Button(
+                        "New chat", id="chat-new-btn", n_clicks=0, className=theme.BTN_SECONDARY_CLASS,
+                        style={**theme.BTN_SECONDARY, "padding": "4px 14px", "fontSize": theme.FS_SM, "whiteSpace": "nowrap"},
+                    ),
+                ],
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": theme.SP_1},
+            ),
+            html.Div(
+                [
+                    html.B("Experimental — "),
+                    "the in-app assistant is still in development and not fully reliable yet; it may "
+                    "misread requests or stumble on complex ones. For dependable runs use the Simulate tab, "
+                    "or drive the simulator from your own client via the ",
+                    dcc.Link("MCP server guide", href="/mcp",
+                             style={"color": theme.WARNING, "fontWeight": "600", "textDecoration": "underline"}),
+                    ".",
+                ],
+                style={**theme.banner_style("warning"), "marginBottom": theme.SP_2},
+            ),
             html.Div(
                 "Drive the simulator in plain English — describe a scenario and the assistant "
                 "configures it, runs it, and plots the result for you.",
@@ -65,7 +92,7 @@ def chat_tab() -> html.Div:
                 style={"marginBottom": theme.SP_2},
             ),
             html.Div(
-                [html.Div(_HINT, id="chat-hint", style={"color": theme.TEXT_MUTED, "fontSize": theme.FS_SM})],
+                [_hint_div()],
                 id="chat-log",
                 style={
                     "display": "flex", "flexDirection": "column", "gap": theme.SP_2,
@@ -144,6 +171,36 @@ def register_chat_callbacks(app, store) -> None:
         Input("chat-send-btn", "n_clicks"),
         prevent_initial_call=True,
     )
+
+    # Keep the transcript pinned to the newest message as it grows. The second pass
+    # (setTimeout) catches the run-figure plots, which finish rendering after the patch.
+    app.clientside_callback(
+        """
+        function(children) {
+            var el = document.getElementById('chat-log');
+            if (el) {
+                requestAnimationFrame(function(){ el.scrollTop = el.scrollHeight; });
+                setTimeout(function(){ el.scrollTop = el.scrollHeight; }, 220);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("chat-scroll-dummy", "data"),
+        Input("chat-log", "children"),
+        prevent_initial_call=True,
+    )
+
+    # "New chat" — reset the transcript, history, and status to a clean slate
+    # (the API key and any unsent input are left untouched).
+    @app.callback(
+        Output("chat-log", "children", allow_duplicate=True),
+        Output("chat-history", "data", allow_duplicate=True),
+        Output("chat-status", "children", allow_duplicate=True),
+        Input("chat-new-btn", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _new_chat(_n):
+        return [_hint_div()], [], ""
 
     @app.callback(
         Output("chat-log", "children"),
