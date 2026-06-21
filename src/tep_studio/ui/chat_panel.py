@@ -46,9 +46,23 @@ def chat_tab() -> html.Div:
             dcc.Store(id="chat-history", data=[]),
             html.H4("Assistant", style={"marginTop": 0}),
             html.Div(
-                "Drive the simulator in natural language. It uses the same tools as the "
-                "MCP server; set ANTHROPIC_API_KEY and install the 'agent' extra to enable it.",
+                "Drive the simulator in plain English — describe a scenario and the assistant "
+                "configures it, runs it, and plots the result for you.",
                 style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2},
+            ),
+            html.Div(
+                [
+                    dcc.Input(
+                        id="chat-api-key", type="password", placeholder="Anthropic API key (sk-ant-…)",
+                        debounce=True, className="tep-input", style={**theme.INPUT, "width": "100%"},
+                    ),
+                    html.Div(
+                        "Used only for this session's requests and never stored. Get a key at console.anthropic.com "
+                        "(or set ANTHROPIC_API_KEY on the server).",
+                        style={"fontSize": theme.FS_XS, "color": theme.TEXT_MUTED, "marginTop": theme.SP_1},
+                    ),
+                ],
+                style={"marginBottom": theme.SP_2},
             ),
             html.Div(
                 [html.Div(_HINT, id="chat-hint", style={"color": theme.TEXT_MUTED, "fontSize": theme.FS_SM})],
@@ -144,16 +158,17 @@ def register_chat_callbacks(app, store) -> None:
         State("chat-history", "data"),
         State("chat-log", "children"),
         State("session-runs", "data"),
+        State("chat-api-key", "value"),
         prevent_initial_call=True,
     )
-    def _send(n, text, history, log_children, session):
+    def _send(n, text, history, log_children, session, api_key):
         text = (text or "").strip()
         if not text:
             raise PreventUpdate
         log = _strip_hint(log_children)
 
         try:
-            turn = respond(history or [], text, toolset)
+            turn = respond(history or [], text, toolset, api_key=(api_key or "").strip() or None)
         except Exception as exc:  # missing key/package, API error — keep the UI alive
             bubble = html.Div(f"⚠ Assistant unavailable: {exc}", style=_ERR_BUBBLE)
             return log + [_user_bubble(text), bubble], history or [], "", "", no_update, no_update, False
