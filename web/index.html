@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>TEP Studio — Tennessee Eastman Process Simulator</title>
+  <meta name="description" content="Interactive Tennessee Eastman Process simulation studio: open/closed-loop runs, disturbances, step tests, and dataset generation in the browser." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏭</text></svg>" />
+
+  <!-- Open Graph (so links to khalidlabs.com/tep look good when shared) -->
+  <meta property="og:title" content="TEP Studio — Tennessee Eastman Process Simulator" />
+  <meta property="og:description" content="Run the modified Tennessee Eastman Process in your browser." />
+  <meta property="og:type" content="website" />
+
+  <style>
+    :root { --bg: #0f1116; --fg: #e8eaed; --accent: #4f6bed; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Full-viewport app frame (handles iOS safe areas) */
+    #app {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh; /* dynamic viewport height on mobile */
+      border: 0;
+      display: block;
+    }
+
+    /* Loading overlay, fades out once the Space responds */
+    #loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: var(--bg);
+      z-index: 10;
+      transition: opacity .5s ease;
+    }
+    #loader.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid rgba(255,255,255,.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-title { font-size: 1.05rem; letter-spacing: .02em; opacity: .9; }
+    .loader-sub { font-size: .8rem; opacity: .55; max-width: 320px; text-align: center; line-height: 1.5; }
+    .loader-sub a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div id="loader">
+    <div class="spinner" role="status" aria-label="Loading"></div>
+    <div class="loader-title">Loading TEP Studio…</div>
+    <div class="loader-sub">
+      First load may take a few seconds while the simulator wakes up.
+      If it doesn't appear, open it
+      <a href="https://profkhalid-tep-studio.hf.space" target="_blank" rel="noopener">directly</a>.
+    </div>
+  </div>
+
+  <iframe
+    id="app"
+    src="https://profkhalid-tep-studio.hf.space"
+    title="TEP Studio — Tennessee Eastman Process Simulator"
+    allow="fullscreen; clipboard-read; clipboard-write"
+    referrerpolicy="no-referrer-when-downgrade"
+    loading="eager"></iframe>
+
+  <script>
+    // Hide the loader once the embedded app finishes loading.
+    var frame = document.getElementById('app');
+    var loader = document.getElementById('loader');
+    function hideLoader() { loader.classList.add('hidden'); }
+    frame.addEventListener('load', hideLoader);
+    // Safety net: never leave the spinner up forever.
+    setTimeout(hideLoader, 12000);
+  </script>
+</body>
+</html>
