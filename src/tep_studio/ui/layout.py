@@ -478,6 +478,43 @@ def _about_page() -> html.Div:
     )
 
 
+def _mcp_page() -> html.Div:
+    """A standalone explainer of the Model Context Protocol (routed at /mcp)."""
+    blocks = [
+        {"type": "para", "text": "The Model Context Protocol (MCP) is an open standard for connecting AI assistants to external "
+         "tools and data through one uniform interface — think of it as a universal port (a “USB-C for AI”). Instead of every "
+         "application hand-wiring each integration, a model speaks a single protocol to any MCP-compatible server."},
+        {"type": "subheading", "text": "The pieces"},
+        {"type": "bullets", "items": [
+            {"term": "Host / client", "text": "the AI application holding the conversation (e.g. Claude Desktop, an IDE, or this studio's Assistant) that connects out to servers."},
+            {"term": "Server", "text": "a small program that exposes capabilities over MCP."},
+            {"term": "Tools", "text": "actions the model can call — e.g. “run a scenario” — described so the model can discover and invoke them."},
+            {"term": "Resources", "text": "read-only data the model can pull into context."},
+            {"term": "Prompts", "text": "reusable, parameterized templates a server can offer."},
+            {"term": "Transport", "text": "stdio for a local server, or HTTP/SSE for a remote one."},
+        ]},
+        {"type": "subheading", "text": "Why it matters"},
+        {"type": "para", "text": "Because the interface is standardized, one server works across any MCP-compatible client and one client "
+         "can reach any server — the same integration is reusable everywhere, and tools are exposed in a structured way the model can use safely."},
+        {"type": "subheading", "text": "MCP in TEP Studio"},
+        {"type": "para", "text": "TEP Studio ships an MCP server (the tep-mcp command) that exposes the simulator's tools — configuring and "
+         "running scenarios and reading their results — so an MCP-compatible assistant such as Claude Desktop can drive the simulator directly. "
+         "The in-app Assistant tab is the same toolset wired to a Claude client inside the studio."},
+        {"type": "subheading", "text": "Using it"},
+        {"type": "reactions", "lines": ["pip install 'tep-studio[agent]'", "tep-mcp        # serve the TEP tools over MCP (stdio)"]},
+        {"type": "para", "text": "Then point an MCP client at the tep-mcp command; the TEP tools appear to your assistant, and you can ask it to run and compare scenarios."},
+        {"type": "note", "text": "Reference: the Model Context Protocol is an open standard — modelcontextprotocol.io."},
+    ]
+    title = {"color": theme.TITLE, "fontSize": "26px", "fontWeight": "700", "marginTop": theme.SP_3, "marginBottom": theme.SP_2}
+    children = [_about_back_link(), html.H1("Model Context Protocol (MCP)", style=title)]
+    children += _render_blocks(blocks)
+    children += [
+        html.Hr(style={"border": "none", "borderTop": "1px solid " + theme.BORDER, "margin": theme.SP_4 + " 0 " + theme.SP_3}),
+        _about_back_link(),
+    ]
+    return html.Div(children, style={**theme.CARD, "maxWidth": "820px", "margin": "0 auto", "padding": "24px 32px 32px"})
+
+
 def _main_tabs() -> dcc.Tabs:
     return dcc.Tabs(
         id="tabs",
@@ -509,13 +546,20 @@ def build_layout() -> html.Div:
                             html.Div("Open / closed-loop runs · disturbances · dataset generation", className="tep-subtitle"),
                         ]
                     ),
-                    dcc.Link("About the TEP →", href="/about", style=about_link),
+                    html.Div(
+                        [
+                            dcc.Link("About the TEP →", href="/about", style=about_link),
+                            dcc.Link("What is MCP? →", href="/mcp", style=about_link),
+                        ],
+                        style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end", "gap": theme.SP_1},
+                    ),
                 ],
                 className="tep-header",
                 style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": theme.SP_4},
             ),
             html.Div(_main_tabs(), id="main-view"),
             html.Div(_about_page(), id="about-view", style=theme.HIDDEN),
+            html.Div(_mcp_page(), id="mcp-view", style=theme.HIDDEN),
         ],
         style={"maxWidth": "1280px", "margin": "0 auto", "padding": "16px 20px 40px", "fontFamily": theme.FONT_FAMILY},
     )

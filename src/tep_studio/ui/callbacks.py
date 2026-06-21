@@ -198,12 +198,19 @@ _SIM_STATE = [
 
 
 def register_callbacks(app, store) -> None:
-    # -- route between the studio and the About page ----------------------
-    @app.callback(Output("main-view", "style"), Output("about-view", "style"), Input("url", "pathname"))
+    # -- route between the studio, the About page, and the MCP page --------
+    @app.callback(
+        Output("main-view", "style"), Output("about-view", "style"), Output("mcp-view", "style"),
+        Input("url", "pathname"),
+    )
     def _route(pathname):
-        if (pathname or "/").rstrip("/").endswith("/about"):
-            return _HIDE, {"display": "block"}
-        return {"display": "block"}, _HIDE
+        path = (pathname or "/").rstrip("/")
+        show = {"display": "block"}
+        if path.endswith("/about"):
+            return _HIDE, show, _HIDE
+        if path.endswith("/mcp"):
+            return _HIDE, _HIDE, show
+        return show, _HIDE, _HIDE
 
     # -- toggle open/closed control panels --------------------------------
     @app.callback(Output("closed-controls", "style"), Output("open-controls", "style"), Input("loop-type", "value"))
