@@ -174,3 +174,51 @@ def step_response(frame, response_column: str, drive_column: str, step_time: flo
     fig.add_vline(x=step_time, line_dash="dot", line_color=_RED, line_width=1)
     fig.update_xaxes(title_text="Time (h)", row=2, col=1)
     return _style(fig, uirevision)
+
+
+def excitation_diagnostics(times, input_cols, input_mat, frame, response_columns, *, dt: float, uirevision: str | None = None) -> go.Figure:
+    """Three stacked panels for a system-identification run: the designed excitation input(s)
+    over time, their power spectrum (band coverage), and the measured plant response."""
+    fig = make_subplots(
+        rows=3, cols=1, vertical_spacing=0.1,
+        subplot_titles=["Excitation input (deviation from baseline)", "Input power spectrum", "Plant response"],
+    )
+    for j, name in enumerate(input_cols):
+        color = _PALETTE[j % len(_PALETTE)]
+        y = np.asarray(input_mat)[:, j]
+        fig.add_trace(go.Scatter(x=times, y=y, mode="lines", line=dict(color=color, width=1.3), name=name), row=1, col=1)
+        sig = y - y.mean()
+        freqs = np.fft.rfftfreq(len(sig), d=dt)
+        amp = np.abs(np.fft.rfft(sig))
+        fig.add_trace(go.Scatter(x=freqs[1:], y=amp[1:], mode="lines", line=dict(color=color, width=1.2), name=name, showlegend=False), row=2, col=1)
+    frame = _thin(frame, 5000)
+    for k, col in enumerate(response_columns):
+        if col in frame:
+            fig.add_trace(go.Scatter(x=frame["time"], y=frame[col], mode="lines", line=dict(color=_PALETTE[k % len(_PALETTE)], width=1.4), name=_label(col)[0]), row=3, col=1)
+    fig.update_xaxes(title_text="Time (h)", row=1, col=1)
+    fig.update_xaxes(title_text="Frequency (1/h)", row=2, col=1)
+    fig.update_xaxes(title_text="Time (h)", row=3, col=1)
+    return _style(fig, uirevision)
+
+
+def batch_coverage(rows, *, x_key: str = "production_mean", y_key: str = "peak_reactor_pressure", uirevision: str | None = None) -> go.Figure:
+    """Scatter of what a batch dataset spans: an outcome (y) vs a knob/outcome (x), split by
+    whether each run tripped — so the operating envelope and the safe region are visible."""
+    def pts(predicate):
+        xs, ys, txt = [], [], []
+        for r in rows:
+            if predicate(bool(r.get("terminated"))) and r.get(x_key) is not None and r.get(y_key) is not None:
+                xs.append(r[x_key]); ys.append(r[y_key]); txt.append(r.get("name", ""))
+        return xs, ys, txt
+
+    fig = go.Figure()
+    ok_x, ok_y, ok_t = pts(lambda t: not t)
+    tr_x, tr_y, tr_t = pts(lambda t: t)
+    fig.add_trace(go.Scatter(x=ok_x, y=ok_y, mode="markers", marker=dict(color=_BLUE, size=9), name="ran", text=ok_t, hovertemplate="%{text}<br>%{x}, %{y}<extra></extra>"))
+    if tr_x:
+        fig.add_trace(go.Scatter(x=tr_x, y=tr_y, mode="markers", marker=dict(color=_RED, size=11, symbol="x"), name="tripped", text=tr_t, hovertemplate="%{text}<br>%{x}, %{y}<extra></extra>"))
+    if y_key == "peak_reactor_pressure":
+        fig.add_hline(y=3000.0, line_dash="dash", line_color=_RED, line_width=1, annotation_text="shutdown 3000 kPa")
+    fig.update_xaxes(title_text=x_key.replace("_", " "))
+    fig.update_yaxes(title_text=y_key.replace("_", " "))
+    return _style(fig, uirevision)

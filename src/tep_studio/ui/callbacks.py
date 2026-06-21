@@ -276,6 +276,7 @@ def register_callbacks(app, store) -> None:
         Output("exc-banner", "style"),
         Output("exc-banner", "children"),
         Output("exc-quality", "children"),
+        Output("exc-graph", "figure"),
         Output("exc-run-btn", "disabled", allow_duplicate=True),
         Input("exc-run-btn", "n_clicks"),
         State("exc-loop", "value"), State("exc-signal", "value"), State("exc-targets", "value"),
@@ -285,8 +286,14 @@ def register_callbacks(app, store) -> None:
     )
     def run_excitation(n, loop, signal, targets, amp, clock, flow, fhigh, horizon, seed, session):
         try:
-            from tep_studio.simulation.excitation import SETPOINT_ACTION_BOUNDS, ExcitationSignal, ExcitationSpec, excitation_quality
+            from tep_studio.simulation.excitation import SETPOINT_ACTION_BOUNDS, ExcitationSignal, ExcitationSpec, excitation_input_matrix, excitation_quality
 
+            target_meas = {
+                "production_rate": "measurement.stripper_underflow", "pct_g": "measurement.stripper_underflow_G_concentration",
+                "reactor_pressure": "measurement.reactor_pressure", "reactor_level": "measurement.reactor_level",
+                "reactor_temperature": "measurement.reactor_temperature", "separator_level": "measurement.separator_level",
+                "stripper_level": "measurement.stripper_level", "ya": "measurement.reactor_feed_A_concentration", "yac": "measurement.reactor_feed_C_concentration",
+            }
             targets = targets or []
             if not targets:
                 raise ValueError("select at least one target to excite")
@@ -307,11 +314,15 @@ def register_callbacks(app, store) -> None:
             store.put(run)
             session = (session or []) + [run.summary()]
             q = excitation_quality(spec, horizon=hz, dt=0.01)
+            cols, mat = excitation_input_matrix(spec, horizon=hz, dt=0.01)
+            times = np.arange(mat.shape[0]) * 0.01
+            response = [target_meas[t] for t in targets if t in target_meas] if kind == "setpoint" else ["measurement.reactor_pressure", "measurement.reactor_level"]
+            fig = figures.excitation_diagnostics(times, cols, mat, run.to_frame(), response, dt=0.01, uirevision=run.run_id)
             outcome = f"shutdown at {run.final_time:.2f} h" if run.terminated else f"ran {run.final_time:.1f} h"
             status = f"{outcome} · peak reactor P = {run.peak.get('reactor_pressure_max', 0):.0f} kPa · run {run.run_id}"
-            return run.run_id, session, status, theme.HIDDEN, "", _exc_quality_view(q, run), False
+            return run.run_id, session, status, theme.HIDDEN, "", _exc_quality_view(q, run), fig, False
         except Exception as exc:
-            return no_update, no_update, "", theme.banner_style("danger"), f"Excitation failed — {exc}", no_update, False
+            return no_update, no_update, "", theme.banner_style("danger"), f"Excitation failed — {exc}", no_update, no_update, False
 
     # -- run a simulation -------------------------------------------------
     @app.callback(
@@ -433,6 +444,19 @@ def register_callbacks(app, store) -> None:
         payload, filename = service.build_dataset(runs, fmt=fmt or "csv")
         return dcc.send_bytes(lambda buffer: buffer.write(payload), filename)
 
+    # -- export preview: overlay the selected-for-export runs -------------
+    @app.callback(
+        Output("dataset-preview-graph", "figure"),
+        Input("dataset-runs", "value"),
+        Input("dataset-preview-var", "value"),
+    )
+    def _dataset_preview(run_ids, column):
+        runs = [store.get(r) for r in (run_ids or [])]
+        runs = [r for r in runs if r is not None]
+        if not runs or not column:
+            return _empty("Tick runs under 'Runs to include' to preview them here")
+        return figures.compare_overlay(runs, column, uirevision="dataset-preview")
+
     # -- batch generation -------------------------------------------------
     @app.callback(
         Output("batch-table", "data"),
@@ -443,6 +467,7 @@ def register_callbacks(app, store) -> None:
         Output("batch-banner", "style"),
         Output("batch-banner", "children"),
         Output("run-batch-btn", "disabled", allow_duplicate=True),
+        Output("batch-coverage-graph", "figure"),
         Input("run-batch-btn", "n_clicks"),
         State("loop-type", "value"),
         State("horizon", "value"),
@@ -480,9 +505,10 @@ def register_callbacks(app, store) -> None:
             session = (session or []) + [run.summary() for run in runs]
             rows = batch.per_run_metrics
             columns = [{"name": k, "id": k} for k in rows[0]] if rows else []
-            return rows, columns, f"ran {len(runs)} scenarios", {"run_ids": list(batch.run_ids)}, session, theme.HIDDEN, "", False
+            fig = figures.batch_coverage(rows, uirevision=batch.batch_id)
+            return rows, columns, f"ran {len(runs)} scenarios", {"run_ids": list(batch.run_ids)}, session, theme.HIDDEN, "", False, fig
         except Exception as exc:
-            return no_update, no_update, "", no_update, no_update, theme.banner_style("danger"), f"Batch failed — {exc}", False
+            return no_update, no_update, "", no_update, no_update, theme.banner_style("danger"), f"Batch failed — {exc}", False, no_update
 
     @app.callback(
         Output("batch-dataset-download", "data"),
