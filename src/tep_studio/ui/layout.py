@@ -479,34 +479,58 @@ def _about_page() -> html.Div:
 
 
 def _mcp_page() -> html.Div:
-    """A standalone explainer of the Model Context Protocol (routed at /mcp)."""
+    """A user guide for the bundled ``tep-mcp`` MCP server (routed at /mcp)."""
     blocks = [
-        {"type": "para", "text": "The Model Context Protocol (MCP) is an open standard for connecting AI assistants to external "
-         "tools and data through one uniform interface — think of it as a universal port (a “USB-C for AI”). Instead of every "
-         "application hand-wiring each integration, a model speaks a single protocol to any MCP-compatible server."},
-        {"type": "subheading", "text": "The pieces"},
-        {"type": "bullets", "items": [
-            {"term": "Host / client", "text": "the AI application holding the conversation (e.g. Claude Desktop, an IDE, or this studio's Assistant) that connects out to servers."},
-            {"term": "Server", "text": "a small program that exposes capabilities over MCP."},
-            {"term": "Tools", "text": "actions the model can call — e.g. “run a scenario” — described so the model can discover and invoke them."},
-            {"term": "Resources", "text": "read-only data the model can pull into context."},
-            {"term": "Prompts", "text": "reusable, parameterized templates a server can offer."},
-            {"term": "Transport", "text": "stdio for a local server, or HTTP/SSE for a remote one."},
+        {"type": "para", "text": "TEP Studio ships an MCP server, tep-mcp, that exposes this simulator as a small set of tools. "
+         "Connect it to any MCP-compatible client (e.g. Claude Desktop) and you can configure, run, inspect, and compare TEP "
+         "scenarios in plain language — the assistant calls the tools for you. These are the same tools behind the in-app Assistant tab."},
+        {"type": "subheading", "text": "1 · Install"},
+        {"type": "reactions", "lines": ["pip install 'tep-studio[agent]'"]},
+        {"type": "para", "text": "This pulls in the MCP SDK and installs the tep-mcp console script. The server speaks MCP over stdio, "
+         "so it is meant to be launched by your client — you don't run it in a terminal yourself."},
+        {"type": "subheading", "text": "2 · Connect a client (Claude Desktop)"},
+        {"type": "para", "text": "Add the server to the client's MCP config and restart the client. For Claude Desktop, edit claude_desktop_config.json:"},
+        {"type": "reactions", "lines": [
+            "{",
+            '  "mcpServers": {',
+            '    "tep-studio": { "command": "tep-mcp" }',
+            "  }",
+            "}",
         ]},
-        {"type": "subheading", "text": "Why it matters"},
-        {"type": "para", "text": "Because the interface is standardized, one server works across any MCP-compatible client and one client "
-         "can reach any server — the same integration is reusable everywhere, and tools are exposed in a structured way the model can use safely."},
-        {"type": "subheading", "text": "MCP in TEP Studio"},
-        {"type": "para", "text": "TEP Studio ships an MCP server (the tep-mcp command) that exposes the simulator's tools — configuring and "
-         "running scenarios and reading their results — so an MCP-compatible assistant such as Claude Desktop can drive the simulator directly. "
-         "The in-app Assistant tab is the same toolset wired to a Claude client inside the studio."},
-        {"type": "subheading", "text": "Using it"},
-        {"type": "reactions", "lines": ["pip install 'tep-studio[agent]'", "tep-mcp        # serve the TEP tools over MCP (stdio)"]},
-        {"type": "para", "text": "Then point an MCP client at the tep-mcp command; the TEP tools appear to your assistant, and you can ask it to run and compare scenarios."},
-        {"type": "note", "text": "Reference: the Model Context Protocol is an open standard — modelcontextprotocol.io."},
+        {"type": "bullets", "items": [
+            {"term": "macOS", "text": "~/Library/Application Support/Claude/claude_desktop_config.json"},
+            {"term": "Windows", "text": "%APPDATA%\\Claude\\claude_desktop_config.json"},
+        ]},
+        {"type": "note", "text": "If tep-mcp isn't on the client's PATH, use its full path (the output of `which tep-mcp`), or set "
+         '"command": "python" with "args": ["-m", "tep_studio.agent.mcp_server"].'},
+        {"type": "subheading", "text": "3 · The tools it exposes"},
+        {"type": "bullets", "items": [
+            {"term": "describe_plant", "text": "the catalog — disturbances (IDVs), measurements, manipulated variables, setpoints (each with its unit, Mode-1 nominal, and the signal it regulates), operating modes, solvers, and the ScenarioConfig fields. Ask the assistant to start here."},
+            {"term": "run_scenario", "text": "run one simulation from a scenario config; returns a run_id plus a summary (shutdown, final time, peak reactor pressure, costs)."},
+            {"term": "get_run", "text": "the summary, exact config, and available plot columns for a previous run_id."},
+            {"term": "get_run_series", "text": "downsampled time series for named variables of a run — a measurement, a valve, or a setpoint name (mapped to the signal it regulates, e.g. production_rate → stripper underflow)."},
+            {"term": "list_runs", "text": "the runs cached in this server session."},
+            {"term": "compare_runs", "text": "two or more runs side by side — shutdown, final time, peak pressure, tracking error."},
+        ]},
+        {"type": "subheading", "text": "4 · A first session"},
+        {"type": "para", "text": "Once connected, just ask in plain language and let the assistant drive the tools. For example:"},
+        {"type": "bullets", "items": [
+            {"text": "“Describe the TEP plant and list the disturbances.”"},
+            {"text": "“Run Mode 1 closed-loop for 24 hours with IDV6 starting at 5 h, and report the peak reactor pressure.”"},
+            {"text": "“Run the same scenario without the disturbance and compare the two.”"},
+            {"text": "“Plot production_rate (the stripper-underflow throughput) and reactor pressure for that run.”"},
+        ]},
+        {"type": "subheading", "text": "Good to know"},
+        {"type": "bullets", "items": [
+            {"term": "Use closed loop", "text": "the base plant (Mode 1) is open-loop unstable and trips on high reactor pressure within ~1 h; closed-loop runs use the built-in controller and survive the horizon."},
+            {"term": "Disturbances latch", "text": "once an IDV activates at its start time it stays on for the rest of the run."},
+            {"term": "Setpoints vs. their signal", "text": "a setpoint is a closed-loop target whose measured signal often has a different name — production_rate, for instance, is the stripper-underflow throughput (m³/h) and is slow / rate-limited, so give it a long horizon to reach a new value."},
+            {"term": "Runs are session-scoped", "text": "they're cached in memory per server session (up to 100); reference them by the run_id you get back. Horizons are capped at 200 h for interactive use."},
+        ]},
+        {"type": "note", "text": "Want to try the tools without configuring a client? The in-app Assistant tab uses this same toolset."},
     ]
     title = {"color": theme.TITLE, "fontSize": "26px", "fontWeight": "700", "marginTop": theme.SP_3, "marginBottom": theme.SP_2}
-    children = [_about_back_link(), html.H1("Model Context Protocol (MCP)", style=title)]
+    children = [_about_back_link(), html.H1("Using the TEP Studio MCP server", style=title)]
     children += _render_blocks(blocks)
     children += [
         html.Hr(style={"border": "none", "borderTop": "1px solid " + theme.BORDER, "margin": theme.SP_4 + " 0 " + theme.SP_3}),
@@ -549,7 +573,7 @@ def build_layout() -> html.Div:
                     html.Div(
                         [
                             dcc.Link("About the TEP →", href="/about", style=about_link),
-                            dcc.Link("What is MCP? →", href="/mcp", style=about_link),
+                            dcc.Link("MCP server guide →", href="/mcp", style=about_link),
                         ],
                         style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end", "gap": theme.SP_1},
                     ),
