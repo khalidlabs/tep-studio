@@ -68,13 +68,28 @@ def build_setpoints(cfg: ScenarioConfig) -> ControllerSetpoints:
     return ControllerSetpoints(**{**mode_default_setpoints(cfg.mode), **(cfg.setpoints or {})})
 
 
+def build_registry(cfg: ScenarioConfig):
+    """The controller tuning for this run: the Mode-1 registry, with any UI overrides applied."""
+    if not cfg.controller_tuning:
+        return RICKER_MODE1
+    from tep_studio.control.tuning import apply_tuning
+
+    return apply_tuning(RICKER_MODE1, cfg.controller_tuning)
+
+
 def build_controller(cfg: ScenarioConfig) -> RickerMultiLoopController:
     return RickerMultiLoopController(
+        registry=build_registry(cfg),
         setpoints=build_setpoints(cfg),
         enable_composition=cfg.enable_composition,
         enable_overrides=cfg.enable_overrides,
         enable_pct_g_feedback=cfg.enable_pct_g_feedback,
     )
+
+
+def initial_state_array(cfg: ScenarioConfig) -> np.ndarray | None:
+    """The explicit start state for this run, or ``None`` to use the mode default."""
+    return None if cfg.initial_state is None else np.asarray(cfg.initial_state, dtype=float)
 
 
 # -- schedules -------------------------------------------------------------
@@ -105,9 +120,9 @@ def setpoint_schedule_from(cfg: ScenarioConfig, base: ControllerSetpoints):
 def _open_loop_action_fn(cfg: ScenarioConfig) -> Callable[[float], np.ndarray]:
     from tep_studio.simulation.modes import mode_initial_state
 
-    # Hold the mode's own steady valves (so open-loop starts balanced); modes that begin at
-    # the base case fall back to the nominal u0. An explicit manual_mvs overrides per valve.
-    state = mode_initial_state(cfg.mode)
+    # Hold the run's own steady valves (so open-loop starts balanced): a custom initial state's
+    # valves win, else the mode's state valves, else the nominal u0. manual_mvs overrides per valve.
+    state = cfg.initial_state if cfg.initial_state is not None else mode_initial_state(cfg.mode)
     base_mv = np.array(RICKER_MODE1.nominal.u0) if state is None else np.asarray(state[38:50], dtype=float)
     base = TEP_SCHEMA.vector("manipulated_variables", cfg.manual_mvs or {}, base=base_mv)
     st = cfg.step_test
@@ -150,6 +165,7 @@ def _run_closed(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> 
     result = runner.run(
         seed=cfg.seed,
         mode=cfg.mode,
+        initial_state=initial_state_array(cfg),
         disturbance_schedule=disturbance_schedule_from(cfg),
         setpoint_schedule=setpoint_schedule_from(cfg, base_sp),
         record_every=cfg.resolved_record_every(),
@@ -180,7 +196,7 @@ def _run_closed(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> 
 
 def _run_open(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> RunResult:
     sim = build_simulator(cfg)
-    meas, _ = sim.reset(mode=cfg.mode, seed=cfg.seed)
+    meas, _ = sim.reset(mode=cfg.mode, initial_state=initial_state_array(cfg), seed=cfg.seed)
     action_fn = _open_loop_action_fn(cfg)
     disturbance_schedule = disturbance_schedule_from(cfg)
     metrics = MetricsAccumulator(setpoints=ControllerSetpoints(**default_setpoints()))

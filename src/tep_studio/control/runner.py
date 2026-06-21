@@ -68,6 +68,7 @@ class ClosedLoopSimulation:
         *,
         seed: float | None = None,
         mode: str = "mode1",
+        initial_state: ArrayLike | None = None,
         disturbances: ArrayLike | None = None,
         disturbance_schedule: DisturbanceSchedule | None = None,
         setpoint_schedule: SetpointSchedule | None = None,
@@ -77,6 +78,7 @@ class ClosedLoopSimulation:
 
         Args:
             seed: measurement-noise seed for a reproducible run.
+            initial_state: optional full 50-element start state (overrides the mode default).
             disturbances: a constant 28-element IDV vector applied for the whole run.
             disturbance_schedule: ``time(h) -> 28-element IDV vector`` for timed/latched
                 disturbances (takes precedence over ``disturbances``).
@@ -89,7 +91,7 @@ class ClosedLoopSimulation:
             A :class:`ClosedLoopResult`; ``.stabilized`` is True when the horizon was
             reached without a plant shutdown.
         """
-        meas, _ = self.sim.reset(mode=mode, seed=seed)
+        meas, _ = self.sim.reset(mode=mode, initial_state=initial_state, seed=seed)
         self.controller.reset(meas, time=self.sim.time)
         # Metrics are seeded from the INITIAL setpoints; for a setpoint step test that
         # means post-step IAE measures the excursion against the pre-step reference.

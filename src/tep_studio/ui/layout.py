@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dash import dash_table, dcc, html
 
+from tep_studio.control.tuning import tuning_rows
 from tep_studio.ui import theme
 from tep_studio.ui.config import setpoint_fields
 from tep_studio.ui.widgets import (
@@ -70,6 +71,57 @@ def _advanced_solver() -> html.Details:
     )
 
 
+def _advanced_initial_state() -> html.Details:
+    """Collapsible custom-initial-state editor (default: the operating mode's state)."""
+    caption = {"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}
+    return html.Details(
+        [
+            html.Summary("Initial state"),
+            html.Div("Start the plant from a custom 50-element state instead of the mode default.", style=caption),
+            _field("Source", dcc.RadioItems(id="initial-state-source", options=[
+                {"label": " Mode default", "value": "mode"},
+                {"label": " Custom vector", "value": "custom"},
+            ], value="mode", inline=True)),
+            _button("Load current mode's state", "load-mode-state-btn", primary=False, style={"marginBottom": theme.SP_2}),
+            dcc.Textarea(
+                id="initial-state-text", placeholder="50 numbers — JSON list or comma/space separated",
+                style={"width": "100%", "height": "120px", "fontFamily": theme.FONT_MONO, "fontSize": theme.FS_XS,
+                       "border": f"1px solid {theme.BORDER}", "borderRadius": theme.RADIUS_SM, "padding": theme.SP_2},
+            ),
+            html.Div(id="initial-state-msg", style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginTop": theme.SP_1}),
+        ],
+        style={"marginTop": theme.SP_2, "marginBottom": theme.SP_2},
+    )
+
+
+def _advanced_tuning() -> html.Details:
+    """Collapsible editable table of every controller tuning parameter (default: Ricker Mode-1)."""
+    caption = {"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}
+    return html.Details(
+        [
+            html.Summary("Controller tuning"),
+            html.Div("PI gains, override limits, and setpoint ramp rates. Edit a value to override it; Reset restores the defaults.", style=caption),
+            dash_table.DataTable(
+                id="tuning-table",
+                data=tuning_rows(),
+                columns=[
+                    {"name": "group", "id": "group", "editable": False},
+                    {"name": "parameter", "id": "parameter", "editable": False},
+                    {"name": "value", "id": "value", "editable": True, "type": "numeric"},
+                ],
+                editable=True,
+                page_size=12,
+                style_table={"overflowX": "auto"},
+                style_header={"backgroundColor": theme.SURFACE_ALT, "fontWeight": "600", "border": f"1px solid {theme.BORDER}"},
+                style_cell={"fontSize": theme.FS_XS, "padding": "4px 8px", "fontFamily": theme.FONT_MONO, "border": f"1px solid {theme.BORDER}", "textAlign": "left"},
+                style_data_conditional=[{"if": {"column_id": "value"}, "backgroundColor": theme.PRIMARY_SOFT}],
+            ),
+            _button("Reset to defaults", "reset-tuning-btn", primary=False, style={"marginTop": theme.SP_2}),
+        ],
+        style={"marginTop": theme.SP_2, "marginBottom": theme.SP_2},
+    )
+
+
 def _config_card() -> html.Div:
     return html.Div(
         [
@@ -86,6 +138,8 @@ def _config_card() -> html.Div:
             _field("Active IDVs", dcc.Dropdown(id="dist-select", options=disturbance_options(), multi=True, placeholder="none")),
             _field("Activation time (h)", dcc.Input(id="dist-start", type="number", value=1.0, min=0, step="any", className="tep-input", style=theme.INPUT)),
             html.Div(id="dist-mag-container", style={"marginBottom": theme.SP_2}),
+            _advanced_initial_state(),
+            _advanced_tuning(),
             _advanced_solver(),
             _button("Run simulation", "run-btn"),
             html.Div(id="run-status", style=theme.status_style("muted")),

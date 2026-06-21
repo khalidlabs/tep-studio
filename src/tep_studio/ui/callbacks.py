@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 
+import numpy as np
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, dcc, html, no_update
 from dash.exceptions import PreventUpdate
@@ -59,6 +60,35 @@ def _floats(text) -> list[float]:
     return [float(x) for x in str(text).replace(";", ",").split(",") if x.strip()]
 
 
+def _parse_state(text) -> tuple[float, ...] | None:
+    """Parse a free-form 50-vector: a JSON array, or comma/space/newline-separated numbers."""
+    if not text or not str(text).strip():
+        return None
+    raw = str(text).strip()
+    try:
+        values = json.loads(raw)
+    except (ValueError, TypeError):
+        values = [tok for tok in raw.replace(",", " ").replace(";", " ").split() if tok]
+    return tuple(float(x) for x in values)
+
+
+def _tuning_overrides(rows) -> dict[str, float] | None:
+    """The table rows that differ from the registry defaults (None if all are default)."""
+    from tep_studio.control.tuning import tuning_defaults
+
+    defaults = tuning_defaults()
+    changed: dict[str, float] = {}
+    for row in rows or []:
+        key, value = row.get("parameter"), row.get("value")
+        if key not in defaults or value is None or value == "":
+            continue
+        new = float(value)
+        ref = defaults[key]
+        if ref is None or abs(new - ref) > 1e-12 * max(1.0, abs(ref)):
+            changed[key] = new
+    return changed or None
+
+
 def _parse_seed(seed):
     return None if seed in (None, "") else float(seed)
 
@@ -96,8 +126,11 @@ def _metric_card(label: str, value) -> html.Div:
 def _scenario(
     loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_ids, dist_select, dist_start, name="scenario",
     dist_mags=None, dist_mag_ids=None, solver_method="RK4", rtol=1e-6, atol=1e-8, fixed_step=0.0005, record_every=0, mode="mode1",
+    initial_state_source="mode", initial_state_text="", tuning_rows_data=None,
 ) -> ScenarioConfig:
     flags = flags or []
+    initial_state = _parse_state(initial_state_text) if initial_state_source == "custom" else None
+    controller_tuning = _tuning_overrides(tuning_rows_data)
     setpoints = {i["name"]: float(v) for i, v in zip(sp_ids, sp_values) if v is not None} or None
     manual_mvs = {i["name"]: float(v) for i, v in zip(mv_ids, mv_values) if v is not None} or None
     mag_by_name = {i["name"]: float(v) for i, v in zip(dist_mag_ids or [], dist_mags or []) if v is not None}
@@ -115,6 +148,8 @@ def _scenario(
         disturbances=disturbances,
         setpoints=setpoints if loop == "closed" else None,
         manual_mvs=manual_mvs if loop == "open" else None,
+        initial_state=initial_state,
+        controller_tuning=controller_tuning if loop == "closed" else None,
         enable_composition="composition" in flags,
         enable_overrides="overrides" in flags,
         enable_pct_g_feedback="pct_g_feedback" in flags,
@@ -150,6 +185,9 @@ _SIM_STATE = [
     State("fixed-step", "value"),
     State("record-every", "value"),
     State("mode-select", "value"),
+    State("initial-state-source", "value"),
+    State("initial-state-text", "value"),
+    State("tuning-table", "data"),
 ]
 
 
@@ -178,6 +216,31 @@ def register_callbacks(app, store) -> None:
             )
         return rows
 
+    # -- initial-state & controller-tuning helpers ------------------------
+    @app.callback(
+        Output("initial-state-text", "value", allow_duplicate=True),
+        Output("initial-state-source", "value", allow_duplicate=True),
+        Input("load-mode-state-btn", "n_clicks"),
+        State("mode-select", "value"),
+        prevent_initial_call=True,
+    )
+    def _load_mode_state(n, mode):
+        from tep_studio.simulation.core import TennesseeEastmanProcess
+
+        sim = TennesseeEastmanProcess()
+        sim.reset(mode=mode or "mode1")
+        return json.dumps([round(float(x), 6) for x in np.asarray(sim.state)[:50]]), "custom"
+
+    @app.callback(
+        Output("tuning-table", "data", allow_duplicate=True),
+        Input("reset-tuning-btn", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _reset_tuning(n):
+        from tep_studio.control.tuning import tuning_rows
+
+        return tuning_rows()
+
     # -- run a simulation -------------------------------------------------
     @app.callback(
         Output("active-run", "data", allow_duplicate=True),
@@ -191,11 +254,12 @@ def register_callbacks(app, store) -> None:
         State("session-runs", "data"),
         prevent_initial_call=True,
     )
-    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode, session):
+    def run_simulation(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode, init_src, init_text, tuning_data, session):
         try:
             cfg = _scenario(
                 loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name=f"{loop}_run",
                 dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every, mode=mode,
+                initial_state_source=init_src, initial_state_text=init_text, tuning_rows_data=tuning_data,
             )
             cfg.validate()
             run = service.run_scenario(cfg)
@@ -543,10 +607,11 @@ def register_callbacks(app, store) -> None:
 
     # -- scenario save / load --------------------------------------------
     @app.callback(Output("scenario-download", "data"), Input("save-scenario-btn", "n_clicks"), *_SIM_STATE, prevent_initial_call=True)
-    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode):
+    def save_scenario(n, loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, mag_v, mag_id, solver, rtol, atol, fixed_step, record_every, mode, init_src, init_text, tuning_data):
         cfg = _scenario(
             loop, horizon, ci, seed, flags, sp_v, sp_id, mv_v, mv_id, dist, dist_start, name="scenario",
             dist_mags=mag_v, dist_mag_ids=mag_id, solver_method=solver, rtol=rtol, atol=atol, fixed_step=fixed_step, record_every=record_every, mode=mode,
+            initial_state_source=init_src, initial_state_text=init_text, tuning_rows_data=tuning_data,
         )
         return dcc.send_string(cfg.to_json(), f"{cfg.name}.json")
 
@@ -565,6 +630,9 @@ def register_callbacks(app, store) -> None:
         Output("record-every", "value"),
         Output({"type": "sp-input", "name": ALL}, "value"),
         Output({"type": "mv-slider", "name": ALL}, "value"),
+        Output("initial-state-source", "value", allow_duplicate=True),
+        Output("initial-state-text", "value", allow_duplicate=True),
+        Output("tuning-table", "data", allow_duplicate=True),
         Input("scenario-upload", "contents"),
         State({"type": "sp-input", "name": ALL}, "id"),
         State({"type": "mv-slider", "name": ALL}, "id"),
@@ -583,12 +651,21 @@ def register_callbacks(app, store) -> None:
         merged_mv = {**default_manual_mvs(), **(cfg.manual_mvs or {})}
         sp_values = [round(float(merged_sp[i["name"]]), 3) for i in sp_ids]
         mv_values = [round(float(merged_mv[i["name"]]), 1) for i in mv_ids]
+        # initial state + controller tuning round-trip
+        from tep_studio.control.tuning import tuning_rows
+
+        init_src = "custom" if cfg.initial_state is not None else "mode"
+        init_text = json.dumps([round(float(x), 6) for x in cfg.initial_state]) if cfg.initial_state is not None else ""
+        tuning_data = tuning_rows()
+        for row in tuning_data:
+            if cfg.controller_tuning and row["parameter"] in cfg.controller_tuning:
+                row["value"] = cfg.controller_tuning[row["parameter"]]
         # Note: per-disturbance magnitudes reset to 1.0 on load (the idv-mag inputs
         # are created only after dist-select updates); full round-trip is a follow-up.
         return (
             cfg.loop_type, cfg.horizon, ci, cfg.seed, flags, dist_names, dist_start,
             cfg.solver_method, cfg.rtol, cfg.atol, cfg.fixed_step, cfg.record_every,
-            sp_values, mv_values,
+            sp_values, mv_values, init_src, init_text, tuning_data,
         )
 
     # -- disable the Run buttons while a synchronous run is in flight -----
