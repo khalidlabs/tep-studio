@@ -243,19 +243,15 @@ def _excitation_card() -> html.Div:
     )
 
 
-def _dataset_tab() -> html.Div:
-    sweep_options = (
-        [{"label": f"setpoints.{f}", "value": f"setpoints.{f}"} for f in setpoint_fields()]
-        + [{"label": "horizon", "value": "horizon"}, {"label": "control_interval", "value": "control_interval"}, {"label": "fixed_step", "value": "fixed_step"}]
-    )
+def _dataset_export() -> html.Div:
+    """Select session runs, preview them, and download a tidy dataset."""
+    cap = {"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}
     return html.Div(
         [
-            _excitation_card(),
             html.Div(
                 [
-                    html.Div(
-                        [
-                            html.H4("Export dataset", style={"marginTop": 0}),
+                    html.H4("Export dataset", style={"marginTop": 0}),
+                    html.Div("Tick the runs to bundle (runs come from the Simulate tab and the generators here), pick a format, and download.", style=cap),
                     _field("Runs to include", dcc.Checklist(id="dataset-runs", options=[], value=[])),
                     _field("Format", dcc.RadioItems(id="dataset-format", options=[{"label": " CSV", "value": "csv"}, {"label": " Parquet", "value": "parquet"}, {"label": " JSON", "value": "json"}], value="csv", inline=True)),
                     _button("Build & download", "build-dataset-btn"),
@@ -266,38 +262,71 @@ def _dataset_tab() -> html.Div:
             ),
             html.Div(
                 [
-                    html.H4("Batch generation", style={"marginTop": 0}),
-                    _field("Seeds (comma-separated)", dcc.Input(id="batch-seeds", type="text", value="1, 2, 3", className="tep-input", style=theme.INPUT_WIDE)),
-                    _field("Sweep parameter (optional)", dcc.Dropdown(id="batch-field", options=sweep_options, placeholder="none")),
-                    _field("Sweep values (comma-separated)", dcc.Input(id="batch-values", type="text", placeholder="e.g. 22, 28, 32", className="tep-input", style=theme.INPUT_WIDE)),
-                    _button("Run batch", "run-batch-btn"),
-                    html.Div(id="batch-status", style=theme.status_style("muted")),
-                    html.Div(id="batch-banner", style=theme.HIDDEN),
-                    dcc.Loading(_table("batch-table")),
-                    html.Div([
-                        _button("Download combined dataset", "batch-dataset-btn", primary=False, style={"marginRight": theme.SP_2}),
-                        _button("Download metrics CSV", "batch-metrics-btn", primary=False),
-                    ], style={"marginTop": theme.SP_2}),
-                    dcc.Download(id="batch-dataset-download"),
-                    dcc.Download(id="batch-metrics-download"),
-                    dcc.Loading(dcc.Graph(id="batch-coverage-graph", config=theme.GRAPH_CONFIG, style={"height": "340px", "marginTop": theme.SP_2})),
+                    html.H4("Preview", style={"marginTop": 0}),
+                    html.Div("Overlay one variable across the ticked runs before downloading.", style=cap),
+                    _field("Variable", dcc.Dropdown(id="dataset-preview-var", options=measurement_options(), value="measurement.reactor_pressure", clearable=False)),
+                    dcc.Loading(dcc.Graph(id="dataset-preview-graph", config=theme.GRAPH_CONFIG, style={"height": "460px"})),
                 ],
                 style={**theme.CARD, **theme.COL_RIGHT},
             ),
-                ],
-                className="tep-row",
-                style=theme.ROW,
-            ),
+        ],
+        className="tep-row",
+        style=theme.ROW,
+    )
+
+
+def _dataset_batch() -> html.Div:
+    """Generate many runs at once (seeds x an optional parameter sweep)."""
+    cap = {"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}
+    sweep_options = (
+        [{"label": f"setpoints.{f}", "value": f"setpoints.{f}"} for f in setpoint_fields()]
+        + [{"label": "horizon", "value": "horizon"}, {"label": "control_interval", "value": "control_interval"}, {"label": "fixed_step", "value": "fixed_step"}]
+    )
+    knob = {"flex": "1 1 230px"}
+    return html.Div(
+        [
+            html.H4("Batch / parameter sweep", style={"marginTop": 0}),
+            html.Div("Generate a dataset from the current Simulate configuration: every seed x an optional parameter sweep. New runs appear under 'Runs to include' on the Export tab.", style=cap),
             html.Div(
                 [
-                    html.H4("Export preview", style={"marginTop": 0}),
-                    html.Div("Overlay one variable across the runs ticked in 'Runs to include', before downloading.", style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}),
-                    _field("Variable", dcc.Dropdown(id="dataset-preview-var", options=measurement_options(), value="measurement.reactor_pressure", clearable=False)),
-                    dcc.Loading(dcc.Graph(id="dataset-preview-graph", config=theme.GRAPH_CONFIG, style={"height": "380px"})),
+                    html.Div(_field("Seeds (comma-separated)", dcc.Input(id="batch-seeds", type="text", value="1, 2, 3", className="tep-input", style=theme.INPUT_WIDE)), style=knob),
+                    html.Div(_field("Sweep parameter (optional)", dcc.Dropdown(id="batch-field", options=sweep_options, placeholder="none")), style=knob),
+                    html.Div(_field("Sweep values (comma-separated)", dcc.Input(id="batch-values", type="text", placeholder="e.g. 22, 28, 32", className="tep-input", style=theme.INPUT_WIDE)), style=knob),
                 ],
-                style=theme.CARD,
+                style={"display": "flex", "gap": theme.SP_3, "flexWrap": "wrap", "alignItems": "flex-end"},
             ),
+            _button("Run batch", "run-batch-btn"),
+            html.Div(id="batch-status", style=theme.status_style("muted")),
+            html.Div(id="batch-banner", style=theme.HIDDEN),
+            dcc.Loading(_table("batch-table")),
+            html.Div(
+                [
+                    _button("Download combined dataset", "batch-dataset-btn", primary=False, style={"marginRight": theme.SP_2}),
+                    _button("Download metrics CSV", "batch-metrics-btn", primary=False),
+                ],
+                style={"marginTop": theme.SP_2},
+            ),
+            dcc.Download(id="batch-dataset-download"),
+            dcc.Download(id="batch-metrics-download"),
+            dcc.Loading(dcc.Graph(id="batch-coverage-graph", config=theme.GRAPH_CONFIG, style={"height": "380px", "marginTop": theme.SP_2})),
         ],
+        style=theme.CARD,
+    )
+
+
+def _dataset_tab() -> html.Div:
+    tab = dict(style=theme.TAB, selected_style=theme.TAB_SELECTED)
+    return html.Div(
+        dcc.Tabs(
+            id="dataset-tabs",
+            value="export",
+            children=[
+                dcc.Tab(label="Export", value="export", children=_dataset_export(), **tab),
+                dcc.Tab(label="System ID (excitation)", value="sysid", children=_excitation_card(), **tab),
+                dcc.Tab(label="Batch sweep", value="batch", children=_dataset_batch(), **tab),
+            ],
+            style={"marginBottom": theme.SP_3},
+        )
     )
 
 
