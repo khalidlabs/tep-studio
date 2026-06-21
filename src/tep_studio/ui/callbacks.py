@@ -18,33 +18,12 @@ from dash.exceptions import PreventUpdate
 
 from tep_studio.simulation.schema import TEP_SCHEMA
 from tep_studio.ui import figures, service, theme
-from tep_studio.ui.config import BatchSpec, DisturbanceActivation, ScenarioConfig, StepTestSpec
+from tep_studio.ui.config import BatchSpec, DisturbanceActivation, ScenarioConfig
 from tep_studio.ui.service import default_manual_mvs, default_setpoints
-from tep_studio.ui.widgets import DEFAULT_PLOT_VARS, mv_target_options, setpoint_target_options
+from tep_studio.ui.widgets import DEFAULT_PLOT_VARS
 
 _SHOW = {**theme.CARD, "display": "block"}
 _HIDE = theme.HIDDEN
-
-SETPOINT_TO_MEAS = {
-    "reactor_level": "measurement.reactor_level",
-    "reactor_pressure": "measurement.reactor_pressure",
-    "reactor_temperature": "measurement.reactor_temperature",
-    "separator_level": "measurement.separator_level",
-    "stripper_level": "measurement.stripper_level",
-    "production_rate": "measurement.stripper_underflow",
-    "pct_g": "measurement.stripper_underflow_G_concentration",
-    "ya": "measurement.reactor_feed_A_concentration",
-    "yac": "measurement.reactor_feed_C_concentration",
-}
-MV_TO_MEAS = {
-    "d_feed_valve": "measurement.feed_D_flow",
-    "e_feed_valve": "measurement.feed_E_flow",
-    "a_feed_valve": "measurement.feed_A_flow",
-    "ac_feed_valve": "measurement.feed_AC_flow",
-    "purge_valve": "measurement.purge_flow",
-    "reactor_cooling_water_valve": "measurement.reactor_temperature",
-    "separator_cooling_water_valve": "measurement.separator_temperature",
-}
 
 
 def _empty(message: str = "Run a simulation to see results") -> go.Figure:
@@ -192,6 +171,13 @@ _SIM_STATE = [
 
 
 def register_callbacks(app, store) -> None:
+    # -- route between the studio and the About page ----------------------
+    @app.callback(Output("main-view", "style"), Output("about-view", "style"), Input("url", "pathname"))
+    def _route(pathname):
+        if (pathname or "/").rstrip("/").endswith("/about"):
+            return _HIDE, {"display": "block"}
+        return {"display": "block"}, _HIDE
+
     # -- toggle open/closed control panels --------------------------------
     @app.callback(Output("closed-controls", "style"), Output("open-controls", "style"), Input("loop-type", "value"))
     def _toggle(loop):
@@ -297,63 +283,6 @@ def register_callbacks(app, store) -> None:
         mv = figures.mv_panel(frame, TEP_SCHEMA.names("manipulated_variables"))
         return traj, mv
 
-    # -- step-test target options depend on the kind ----------------------
-    @app.callback(Output("step-target", "options"), Output("step-target", "value"), Input("step-kind", "value"))
-    def _step_targets(kind):
-        if kind == "mv":
-            options = mv_target_options()
-            return options, options[0]["value"]
-        return setpoint_target_options(), "reactor_level"
-
-    # -- run a step test --------------------------------------------------
-    @app.callback(
-        Output("active-run", "data", allow_duplicate=True),
-        Output("session-runs", "data", allow_duplicate=True),
-        Output("step-graph", "figure"),
-        Output("step-status", "children"),
-        Output("step-banner", "style"),
-        Output("step-banner", "children"),
-        Output("run-step-btn", "disabled", allow_duplicate=True),
-        Input("run-step-btn", "n_clicks"),
-        State("step-kind", "value"),
-        State("step-target", "value"),
-        State("step-baseline", "value"),
-        State("step-value", "value"),
-        State("step-time", "value"),
-        State("step-horizon", "value"),
-        State("step-ci", "value"),
-        State("session-runs", "data"),
-        prevent_initial_call=True,
-    )
-    def run_step(n, kind, target, baseline, step_value, step_time, horizon, ci, session):
-        try:
-            spec = StepTestSpec(kind=kind, target=target, baseline=float(baseline), step_value=float(step_value), step_time=float(step_time))
-            cfg = ScenarioConfig(
-                name=f"step_{target}",
-                loop_type="open" if kind == "mv" else "closed",
-                horizon=float(horizon or 6.0),
-                control_interval=float(ci),
-                step_test=spec,
-            )
-            cfg.validate()
-            run = service.run_scenario(cfg)
-            store.put(run)
-            session = (session or []) + [run.summary()]
-            frame = run.to_frame()
-            if kind == "mv":
-                drive_col = f"implemented_action.{target}"
-                response = MV_TO_MEAS.get(target, "measurement.reactor_pressure")
-            else:
-                frame = frame.copy()
-                frame["drive.setpoint"] = [float(step_value) if t >= float(step_time) else float(baseline) for t in frame["time"]]
-                drive_col = "drive.setpoint"
-                response = SETPOINT_TO_MEAS.get(target, "measurement.reactor_pressure")
-            fig = figures.step_response(frame, response, drive_col, float(step_time))
-            status = f"{'shutdown at %.2f h' % run.final_time if run.terminated else 'ran %.1f h' % run.final_time} · run {run.run_id}"
-            return run.run_id, session, fig, status, theme.HIDDEN, "", False
-        except Exception as exc:
-            return no_update, no_update, no_update, "", theme.banner_style("danger"), f"Step test failed — {exc}", False
-
     # -- keep run-derived lists in sync with the session ------------------
     @app.callback(
         Output("dataset-runs", "options"),
@@ -381,55 +310,6 @@ def register_callbacks(app, store) -> None:
 
         sp = mode_default_setpoints(mode or "mode1")
         return [round(float(sp[i["name"]]), 3) for i in sp_ids]
-
-    # -- FDD benchmark generation + download ------------------------------
-    @app.callback(
-        Output("bench-summary-table", "data"),
-        Output("bench-summary-table", "columns"),
-        Output("bench-status", "children"),
-        Output("bench-banner", "style"),
-        Output("bench-banner", "children"),
-        Output("bench-download", "data"),
-        Output("bench-run-btn", "disabled", allow_duplicate=True),
-        Input("bench-run-btn", "n_clicks"),
-        State("bench-faults", "value"),
-        State("bench-mode", "value"),
-        State("bench-runs", "value"),
-        State("bench-onset", "value"),
-        State("bench-horizon", "value"),
-        State("bench-sampling", "value"),
-        State("bench-format", "value"),
-        prevent_initial_call=True,
-    )
-    def run_benchmark(n, faults, mode, runs, onset, horizon, sampling, fmt):
-        try:
-            from tep_studio.simulation.benchmark import make_fdd_benchmark
-
-            faults = tuple(faults or [])
-            bench = make_fdd_benchmark(
-                faults=faults, n_runs_per_fault=int(runs or 1), onset_h=float(onset or 8.0),
-                horizon_h=float(horizon or 24.0), sampling_min=float(sampling or 3.0), mode=mode or "mode1",
-            )
-            summary = bench.summary()
-            rows = summary.to_dict("records")
-            columns = [{"name": c, "id": c} for c in summary.columns]
-            frame = bench.to_frame()
-            fmt = fmt or "csv"
-            if fmt == "parquet":
-                import io
-
-                buffer = io.BytesIO()
-                frame.to_parquet(buffer, index=False)
-                payload, filename = buffer.getvalue(), "tep_fdd_benchmark.parquet"
-            elif fmt == "json":
-                payload, filename = frame.to_json(orient="records").encode("utf-8"), "tep_fdd_benchmark.json"
-            else:
-                payload, filename = frame.to_csv(index=False).encode("utf-8"), "tep_fdd_benchmark.csv"
-            download = dcc.send_bytes(lambda b: b.write(payload), filename)
-            status = f"generated {len(bench.runs)} runs ({len(faults)} faults + fault-free), {len(frame)} rows"
-            return rows, columns, status, theme.HIDDEN, "", download, False
-        except Exception as exc:
-            return no_update, no_update, "", theme.banner_style("danger"), f"Benchmark failed — {exc}", no_update, False
 
     # -- RunStore capacity / eviction indicator ---------------------------
     @app.callback(Output("store-capacity", "children"), Output("store-capacity", "style"), Input("session-runs", "data"))
@@ -669,7 +549,7 @@ def register_callbacks(app, store) -> None:
         )
 
     # -- disable the Run buttons while a synchronous run is in flight -----
-    for _btn in ("run-btn", "run-step-btn", "run-batch-btn", "bench-run-btn"):
+    for _btn in ("run-btn", "run-batch-btn"):
         app.clientside_callback(
             "function(n){ return !!n; }",
             Output(_btn, "disabled", allow_duplicate=True),

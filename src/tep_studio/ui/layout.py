@@ -19,7 +19,6 @@ from tep_studio.ui.widgets import (
     mode_options,
     mv_sliders,
     setpoint_inputs,
-    setpoint_target_options,
 )
 
 
@@ -156,6 +155,18 @@ def _config_card() -> html.Div:
     )
 
 
+def _graph_panel(graph_id: str, *, grow: int, basis: str, min_height: str) -> html.Div:
+    """A flex-growing graph cell so the plots column fills the matched column height.
+    Extra space is split by ``grow`` (the MV plot is given the larger share)."""
+    return html.Div(
+        dcc.Loading(
+            dcc.Graph(id=graph_id, config=theme.GRAPH_CONFIG, responsive=True, style={"height": "100%"}),
+            parent_style={"height": "100%"},
+        ),
+        style={"flex": f"{grow} 1 {basis}", "minHeight": min_height, "marginTop": theme.SP_2},
+    )
+
+
 def _simulate_tab() -> html.Div:
     return html.Div(
         [
@@ -164,41 +175,17 @@ def _simulate_tab() -> html.Div:
                 [
                     _field("Variables to plot", dcc.Dropdown(id="plot-vars", options=measurement_options(), value=DEFAULT_PLOT_VARS, multi=True)),
                     dcc.Checklist(id="plot-toggles", options=[{"label": " setpoints", "value": "setpoints"}, {"label": " limits", "value": "limits"}], value=["setpoints", "limits"], inline=True),
-                    dcc.Loading(dcc.Graph(id="trajectory-graph", config=theme.GRAPH_CONFIG, style={"height": "560px"})),
-                    dcc.Loading(dcc.Graph(id="mv-graph", config=theme.GRAPH_CONFIG, style={"height": "320px"})),
+                    # The plots column stretches to the configuration column's height (row
+                    # alignItems=stretch); the two graphs then fill it, with the MV plot
+                    # claiming the larger share of the extra space (grow 2 vs 1).
+                    _graph_panel("trajectory-graph", grow=1, basis="520px", min_height="300px"),
+                    _graph_panel("mv-graph", grow=2, basis="300px", min_height="260px"),
                 ],
-                style={**theme.CARD, **theme.COL_RIGHT},
+                style={**theme.CARD, **theme.COL_RIGHT, "display": "flex", "flexDirection": "column"},
             ),
         ],
         className="tep-row",
-        style=theme.ROW,
-    )
-
-
-def _step_test_tab() -> html.Div:
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.H4("Step test", style={"marginTop": 0}),
-                    _field("Kind", dcc.RadioItems(id="step-kind", options=[{"label": " Setpoint (closed loop)", "value": "setpoint"}, {"label": " MV (open loop)", "value": "mv"}], value="setpoint")),
-                    _field("Target", dcc.Dropdown(id="step-target", options=setpoint_target_options(), value="reactor_level")),
-                    _field("Baseline value", dcc.Input(id="step-baseline", type="number", value=75.0, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Step value", dcc.Input(id="step-value", type="number", value=70.0, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Step time (h)", dcc.Input(id="step-time", type="number", value=1.0, min=0, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Horizon (h)", dcc.Input(id="step-horizon", type="number", value=6.0, min=0.1, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Fidelity", dcc.RadioItems(id="step-ci", options=[{"label": " Explore", "value": 0.01}, {"label": " Fidelity", "value": 0.0005}], value=0.01)),
-                    _button("Run step test", "run-step-btn"),
-                    html.Div(id="step-status", style=theme.status_style("muted")),
-                    html.Div(id="step-banner", style=theme.HIDDEN),
-                ],
-                className="tep-col-left",
-                style={**theme.CARD, **theme.COL_LEFT},
-            ),
-            html.Div(dcc.Loading(dcc.Graph(id="step-graph", config=theme.GRAPH_CONFIG, style={"height": "640px"})), style={**theme.CARD, **theme.COL_RIGHT}),
-        ],
-        className="tep-row",
-        style=theme.ROW,
+        style={**theme.ROW, "alignItems": "stretch"},
     )
 
 
@@ -280,61 +267,151 @@ def _record_tab() -> html.Div:
     )
 
 
-def _benchmark_tab() -> html.Div:
+def _about_page() -> html.Div:
+    """A standalone information page on the Tennessee Eastman process (routed at /about)."""
+    h2 = {"color": theme.TITLE, "fontSize": theme.FS_XL, "fontWeight": "600", "marginTop": theme.SP_5, "marginBottom": theme.SP_2}
+    h3 = {"color": theme.TITLE, "fontSize": theme.FS_LG, "fontWeight": "600", "marginTop": theme.SP_4, "marginBottom": theme.SP_1}
+    para = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginBottom": theme.SP_2}
+    ul = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginTop": 0, "marginBottom": theme.SP_2, "paddingLeft": "20px"}
+    mono = {"fontFamily": theme.FONT_MONO, "fontSize": theme.FS_SM, "background": theme.SURFACE_ALT, "padding": "10px 12px", "borderRadius": theme.RADIUS_SM, "lineHeight": "1.8", "margin": f"0 0 {theme.SP_2} 0", "whiteSpace": "pre", "overflowX": "auto"}
+
     return html.Div(
         [
-            html.Div(
-                [
-                    html.H4("FDD benchmark", style={"marginTop": 0}),
-                    html.Div("Fault-free + per-IDV runs with labels, fixed onset, and train/test splits.", style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}),
-                    _field("Faults (IDVs)", dcc.Dropdown(id="bench-faults", options=disturbance_options(), value=["idv_01", "idv_04", "idv_06"], multi=True)),
-                    _field("Operating mode", dcc.Dropdown(id="bench-mode", options=mode_options(), value="mode1", clearable=False)),
-                    _field("Runs per fault", dcc.Input(id="bench-runs", type="number", value=2, min=1, step=1, className="tep-input", style=theme.INPUT)),
-                    _field("Fault onset (h)", dcc.Input(id="bench-onset", type="number", value=8.0, min=0, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Horizon (h)", dcc.Input(id="bench-horizon", type="number", value=24.0, min=0.5, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Sampling (min)", dcc.Input(id="bench-sampling", type="number", value=3.0, min=0.1, step="any", className="tep-input", style=theme.INPUT)),
-                    _field("Format", dcc.RadioItems(id="bench-format", options=[{"label": " CSV", "value": "csv"}, {"label": " Parquet", "value": "parquet"}, {"label": " JSON", "value": "json"}], value="csv", inline=True)),
-                    _button("Generate & download", "bench-run-btn"),
-                    html.Div(id="bench-status", style=theme.status_style("muted")),
-                    html.Div(id="bench-banner", style=theme.HIDDEN),
-                    dcc.Download(id="bench-download"),
-                ],
-                className="tep-col-left",
-                style={**theme.CARD, **theme.COL_LEFT},
+            dcc.Link("← Back to the studio", href="/", style={"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500"}),
+            html.H1("The Tennessee Eastman Process", style={"color": theme.TITLE, "fontSize": "26px", "fontWeight": "700", "marginTop": theme.SP_3, "marginBottom": theme.SP_2}),
+            html.P(
+                "The Tennessee Eastman Process (TEP) is a realistic, open-loop-unstable model of an industrial "
+                "chemical plant. It was published by Downs and Vogel (1993) as a plant-wide control and monitoring "
+                "challenge — a real Eastman Chemical process with the proprietary chemistry and components disguised. "
+                "It has since become the standard testbed for process control, fault detection and diagnosis, and, more "
+                "recently, reinforcement learning.",
+                style=para,
             ),
-            html.Div([html.H4("Per-fault run summary", style={"marginTop": 0}), dcc.Loading(_table("bench-summary-table"))], style={**theme.CARD, **theme.COL_RIGHT}),
+
+            html.H2("The plant", style=h2),
+            html.P("Five unit operations, linked by a tight gas recycle:", style=para),
+            html.Ul(
+                [
+                    html.Li([html.B("Reactor"), " — a two-phase, exothermic gas–liquid reactor where the products form; cooled by internal cooling water."]),
+                    html.Li([html.B("Condenser"), " — partially condenses the reactor effluent."]),
+                    html.Li([html.B("Vapour–liquid separator"), " — splits condensed liquid from the uncondensed gas."]),
+                    html.Li([html.B("Recycle compressor"), " — returns unreacted gas to the reactor."]),
+                    html.Li([html.B("Product stripper"), " — strips remaining light components; the liquid products leave its base."]),
+                ],
+                style=ul,
+            ),
+            html.P("Non-condensable gas and the inert component are vented through a purge to keep pressure and inerts in check.", style=para),
+
+            html.H2("Chemistry", style=h2),
+            html.P("Four irreversible, exothermic, gas-phase reactions convert gaseous reactants into two liquid products plus a byproduct:", style=para),
+            html.Div("A + C + D  →  G   (liquid product)\nA + C + E  →  H   (liquid product)\nA + E      →  F   (byproduct)\n3 D        →  2 F  (byproduct)", style=mono),
+            html.P(
+                "Eight components: reactants A, C, D, E; inert B; byproduct F; products G and H. Rates follow Arrhenius "
+                "kinetics, so the reactor temperature shifts product selectivity — lower temperature favours G, higher favours H.",
+                style=para,
+            ),
+
+            html.H2("Feeds, products, and operating modes", style=h2),
+            html.P(
+                "Four gaseous feeds enter the loop — pure A, pure D, pure E, and a combined A+C stream. Production is the "
+                "liquid G/H leaving the stripper. The economics of a run are set by the G:H mass ratio and the production "
+                "rate, which define six standard operating modes:",
+                style=para,
+            ),
+            html.Ul(
+                [
+                    html.Li("50/50 G:H — at base rate (Mode 1) and at maximum rate (Mode 4)"),
+                    html.Li("10/90 G:H — at base rate (Mode 2) and at maximum rate (Mode 5)"),
+                    html.Li("90/10 G:H — at base rate (Mode 3) and at maximum rate (Mode 6)"),
+                ],
+                style=ul,
+            ),
+
+            html.H2("Variables", style=h2),
+            html.Ul(
+                [
+                    html.Li([html.B("41 measurements (XMEAS)"), " — 22 sampled continuously (flows, levels, pressures, temperatures) and 19 composition readings from gas chromatographs on the reactor feed, the purge, and the product, with realistic analyzer dead time."]),
+                    html.Li([html.B("12 manipulated variables (XMV)"), " — the feed, purge, and product valves; the recycle and stripper-steam valves; the reactor and condenser cooling-water valves; and the reactor agitator speed."]),
+                    html.Li([html.B("Process disturbances (IDV)"), " — 20 in the original problem (feed-composition steps, reaction-kinetics drift, sticking valves, loss of A feed, …); this simulator exposes 28."]),
+                ],
+                style=ul,
+            ),
+
+            html.H2("The control challenge", style=h2),
+            html.P(
+                "The plant is open-loop unstable: with the valves held fixed it trips within about an hour. A controller "
+                "must hold it inside hard operating limits — reactor pressure below roughly 3000 kPa, bounded "
+                "temperatures and liquid levels — or a safety interlock shuts the plant down, all while minimizing "
+                "operating cost and rejecting disturbances. The tight material recycle couples every unit, so single-loop "
+                "tuning interacts plant-wide. That combination of instability, hard constraints, and interaction is what "
+                "makes the TEP a demanding and enduring benchmark.",
+                style=para,
+            ),
+
+            html.H2("How the TEP is used", style=h2),
+            html.Ul(
+                [
+                    html.Li([html.B("Fault detection & diagnosis"), " — the canonical labeled benchmark (fault-free plus per-disturbance datasets)."]),
+                    html.Li([html.B("Control benchmarking"), " — PID, decentralized multiloop, and model-predictive control."]),
+                    html.Li([html.B("Reinforcement learning"), " — a hard, safety-constrained continuous-control environment."]),
+                    html.Li([html.B("Operator training & plant-wide research"), " — multimode operation, transfer learning, and real-time optimization."]),
+                ],
+                style=ul,
+            ),
+
+            html.H2("In this studio", style=h2),
+            html.P(
+                "Run any of the six operating modes open- or closed-loop, inject timed disturbances, edit the initial "
+                "state and the controller tuning, compare runs side by side, and export tidy datasets for machine "
+                "learning — all from the Simulate, Dataset, Compare, and Metrics / Record tabs.",
+                style=para,
+            ),
+
+            html.Hr(style={"border": "none", "borderTop": f"1px solid {theme.BORDER}", "margin": f"{theme.SP_5} 0 {theme.SP_3}"}),
+            html.P("Reference: J. J. Downs and E. F. Vogel, “A plant-wide industrial process control problem,” Computers & Chemical Engineering 17(3), 1993.", style={**para, "fontSize": theme.FS_SM, "color": theme.TEXT_MUTED}),
+            dcc.Link("← Back to the studio", href="/", style={"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500"}),
         ],
-        className="tep-row",
-        style=theme.ROW,
+        style={**theme.CARD, "maxWidth": "820px", "margin": "0 auto", "padding": "24px 32px 32px"},
+    )
+
+
+def _main_tabs() -> dcc.Tabs:
+    return dcc.Tabs(
+        id="tabs",
+        value="simulate",
+        children=[
+            dcc.Tab(label="Simulate", value="simulate", children=_simulate_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+            dcc.Tab(label="Dataset", value="dataset", children=_dataset_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+            dcc.Tab(label="Compare", value="compare", children=_compare_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+            dcc.Tab(label="Metrics / Record", value="record", children=_record_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+        ],
+        style={"marginBottom": theme.SP_3},
     )
 
 
 def build_layout() -> html.Div:
+    about_link = {"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500", "whiteSpace": "nowrap", "marginTop": "4px"}
     return html.Div(
         [
+            dcc.Location(id="url"),
             dcc.Store(id="session-runs", storage_type="session", data=[]),
             dcc.Store(id="active-run", storage_type="memory"),
             dcc.Store(id="batch-store", storage_type="memory"),
             html.Div(
                 [
-                    html.H1("Tennessee Eastman Process — Simulation Studio", className="tep-title"),
-                    html.Div("Open / closed-loop runs · disturbances · step tests · dataset generation", className="tep-subtitle"),
+                    html.Div(
+                        [
+                            html.H1("Tennessee Eastman Process — Simulation Studio", className="tep-title"),
+                            html.Div("Open / closed-loop runs · disturbances · dataset generation", className="tep-subtitle"),
+                        ]
+                    ),
+                    dcc.Link("About the TEP →", href="/about", style=about_link),
                 ],
                 className="tep-header",
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": theme.SP_4},
             ),
-            dcc.Tabs(
-                id="tabs",
-                value="simulate",
-                children=[
-                    dcc.Tab(label="Simulate", value="simulate", children=_simulate_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="Step Test", value="steptest", children=_step_test_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="Dataset", value="dataset", children=_dataset_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="Compare", value="compare", children=_compare_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="Benchmark", value="benchmark", children=_benchmark_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                    dcc.Tab(label="Metrics / Record", value="record", children=_record_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
-                ],
-                style={"marginBottom": theme.SP_3},
-            ),
+            html.Div(_main_tabs(), id="main-view"),
+            html.Div(_about_page(), id="about-view", style=theme.HIDDEN),
         ],
         style={"maxWidth": "1280px", "margin": "0 auto", "padding": "16px 20px 40px", "fontFamily": theme.FONT_FAMILY},
     )

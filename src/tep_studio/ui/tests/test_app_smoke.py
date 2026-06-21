@@ -25,16 +25,19 @@ def test_create_app_builds_layout_and_callbacks() -> None:
     app = create_app(background=False)
     ids = _string_ids(app.layout)
 
-    # stores + tab container + one representative control per tab
+    # stores + router + tab container + one representative control per tab/panel
     expected = {
         "session-runs",
         "active-run",
         "batch-store",
+        "url",
+        "main-view",
+        "about-view",
         "tabs",
         "run-btn",
         "trajectory-graph",
-        "run-step-btn",
-        "step-graph",
+        "initial-state-text",
+        "tuning-table",
         "build-dataset-btn",
         "run-batch-btn",
         "compare-graph",
@@ -42,6 +45,8 @@ def test_create_app_builds_layout_and_callbacks() -> None:
     }
     missing = expected - ids
     assert not missing, f"missing component ids: {missing}"
+    # the removed Step Test / Benchmark tabs must be gone
+    assert not ({"run-step-btn", "step-graph", "bench-run-btn"} & ids), "step-test/benchmark components still present"
     assert len(app.callback_map) > 8  # all the wired callbacks
 
 
@@ -65,7 +70,7 @@ def test_number_inputs_commit_on_keystroke() -> None:
     from tep_studio.ui import create_app
 
     app = create_app()
-    for input_id in ("horizon", "step-horizon", "step-value", "step-time", "dist-start", "seed"):
+    for input_id in ("horizon", "dist-start", "seed"):
         node = _find(app.layout, input_id)
         assert node is not None, f"missing input {input_id}"
         assert getattr(node, "debounce", None) is not True, f"{input_id} must commit on keystroke (debounce must not be True)"
