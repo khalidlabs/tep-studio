@@ -123,6 +123,7 @@ def create_app(*, background: bool = False, store=None, capacity: int = 50):
     from dash import Dash
 
     from tep_studio.ui.callbacks import register_callbacks
+    from tep_studio.ui.chat_panel import register_chat_callbacks
     from tep_studio.ui.layout import build_layout
     from tep_studio.ui.store import RunStore
 
@@ -131,5 +132,6 @@ def create_app(*, background: bool = False, store=None, capacity: int = 50):
     run_store = store or RunStore(capacity=capacity)
     app.layout = build_layout()
     register_callbacks(app, run_store)
+    register_chat_callbacks(app, run_store)
     app.run_store = run_store  # keep a reference for tests / embedding
     return app

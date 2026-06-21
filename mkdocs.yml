@@ -48,6 +48,7 @@ nav:
   - Optimization: optimization.md
   - Closed-Loop Control: control.md
   - Interface (Studio): ui.md
+  - LLM / Agents: agent.md
   - Validation: validation.md
   - Comparison: comparison.md
   - Troubleshooting: troubleshooting.md

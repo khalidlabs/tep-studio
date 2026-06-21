@@ -15,6 +15,7 @@ from tep_studio.ui.config import setpoint_fields
 from tep_studio.simulation.excitation import SIGNAL_TYPES
 from tep_studio.simulation.schema import TEP_SCHEMA
 from tep_studio.ui.about_content import ABOUT_SECTIONS
+from tep_studio.ui.chat_panel import chat_tab
 from tep_studio.ui.widgets import (
     DEFAULT_PLOT_VARS,
     disturbance_options,
@@ -446,6 +447,7 @@ def _main_tabs() -> dcc.Tabs:
             dcc.Tab(label="Dataset", value="dataset", children=_dataset_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
             dcc.Tab(label="Compare", value="compare", children=_compare_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
             dcc.Tab(label="Metrics / Record", value="record", children=_record_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
+            dcc.Tab(label="Assistant", value="assistant", children=chat_tab(), style=theme.TAB, selected_style=theme.TAB_SELECTED),
         ],
         style={"marginBottom": theme.SP_3},
     )
