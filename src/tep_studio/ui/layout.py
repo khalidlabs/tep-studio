@@ -12,6 +12,7 @@ from dash import dash_table, dcc, html
 from tep_studio.control.tuning import tuning_rows
 from tep_studio.ui import theme
 from tep_studio.ui.config import setpoint_fields
+from tep_studio.simulation.excitation import SIGNAL_TYPES
 from tep_studio.simulation.schema import TEP_SCHEMA
 from tep_studio.ui.about_content import ABOUT_SECTIONS
 from tep_studio.ui.widgets import (
@@ -191,6 +192,55 @@ def _simulate_tab() -> html.Div:
     )
 
 
+def _excitation_card() -> html.Div:
+    """Designed plant-test (system-identification) excitation generator."""
+    cap = {"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}
+    sp_targets = [{"label": f, "value": f} for f in setpoint_fields()]
+    return html.Div(
+        [
+            html.H4("System identification — excitation", style={"marginTop": 0}),
+            html.Div(
+                "Generate a designed plant test (PRBS, GBN, APRBS, multisine, chirp) for model identification — the data you'd collect to "
+                "commission an APC/MPC. Closed loop excites the controller setpoints (safe); open loop excites the valves directly — keep those short.",
+                style=cap,
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            _field("Loop", dcc.RadioItems(id="exc-loop", options=[{"label": " Closed (setpoints)", "value": "closed"}, {"label": " Open (MVs)", "value": "open"}], value="closed", inline=True)),
+                            _field("Signal", dcc.Dropdown(id="exc-signal", options=[{"label": s, "value": s} for s in SIGNAL_TYPES], value="prbs", clearable=False)),
+                            _field("Targets", dcc.Dropdown(id="exc-targets", options=sp_targets, value=["reactor_pressure", "production_rate"], multi=True)),
+                            _field("Amplitude (fraction of safe range)", dcc.Input(id="exc-amp", type="number", value=0.3, min=0, max=1, step="any", className="tep-input", style=theme.INPUT)),
+                        ],
+                        className="tep-col-left",
+                        style={**theme.CARD, **theme.COL_LEFT},
+                    ),
+                    html.Div(
+                        [
+                            _field("Clock / hold (h) — step·PRBS·GBN·APRBS", dcc.Input(id="exc-clock", type="number", value=0.5, min=0.01, step="any", className="tep-input", style=theme.INPUT)),
+                            _field("Frequency band (1/h) — multisine·chirp", html.Div([
+                                dcc.Input(id="exc-flow", type="number", value=0.1, step="any", className="tep-input", style={**theme.INPUT, "width": "96px", "marginRight": theme.SP_2}),
+                                dcc.Input(id="exc-fhigh", type="number", value=2.0, step="any", className="tep-input", style={**theme.INPUT, "width": "96px"}),
+                            ])),
+                            _field("Horizon (h)", dcc.Input(id="exc-horizon", type="number", value=16.0, min=0.5, step="any", className="tep-input", style=theme.INPUT)),
+                            _field("Seed", dcc.Input(id="exc-seed", type="number", value=1, step=1, className="tep-input", style=theme.INPUT)),
+                            _button("Run excitation", "exc-run-btn"),
+                            html.Div(id="exc-status", style=theme.status_style("muted")),
+                            html.Div(id="exc-banner", style=theme.HIDDEN),
+                        ],
+                        style={**theme.CARD, **theme.COL_RIGHT},
+                    ),
+                ],
+                className="tep-row",
+                style=theme.ROW,
+            ),
+            html.Div(id="exc-quality", style={"marginTop": theme.SP_2}),
+        ],
+        style=theme.CARD,
+    )
+
+
 def _dataset_tab() -> html.Div:
     sweep_options = (
         [{"label": f"setpoints.{f}", "value": f"setpoints.{f}"} for f in setpoint_fields()]
@@ -198,9 +248,12 @@ def _dataset_tab() -> html.Div:
     )
     return html.Div(
         [
+            _excitation_card(),
             html.Div(
                 [
-                    html.H4("Export dataset", style={"marginTop": 0}),
+                    html.Div(
+                        [
+                            html.H4("Export dataset", style={"marginTop": 0}),
                     _field("Runs to include", dcc.Checklist(id="dataset-runs", options=[], value=[])),
                     _field("Format", dcc.RadioItems(id="dataset-format", options=[{"label": " CSV", "value": "csv"}, {"label": " Parquet", "value": "parquet"}, {"label": " JSON", "value": "json"}], value="csv", inline=True)),
                     _button("Build & download", "build-dataset-btn"),
@@ -228,9 +281,11 @@ def _dataset_tab() -> html.Div:
                 ],
                 style={**theme.CARD, **theme.COL_RIGHT},
             ),
+                ],
+                className="tep-row",
+                style=theme.ROW,
+            ),
         ],
-        className="tep-row",
-        style=theme.ROW,
     )
 
 

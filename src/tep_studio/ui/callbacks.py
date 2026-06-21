@@ -102,6 +102,33 @@ def _metric_card(label: str, value) -> html.Div:
     )
 
 
+def _exc_quality_view(q: dict, run) -> html.Div:
+    """Render the excitation-quality report (PE order, condition number, per-channel power)."""
+    cond = q.get("condition_number", float("inf"))
+    cards = [
+        _metric_card("PE order", q.get("pe_order", 0)),
+        _metric_card("regressor rank", q.get("regressor_rank", 0)),
+        _metric_card("condition number", "∞" if cond == float("inf") else f"{cond:.0f}"),
+        _metric_card("channels", q.get("n_channels", 0)),
+        _metric_card("samples", q.get("n_samples", 0)),
+    ]
+    th = {"textAlign": "left", "padding": "4px 10px", "borderBottom": f"1px solid {theme.BORDER}", "color": theme.TEXT_MUTED}
+    td = {"padding": "4px 10px", "borderBottom": f"1px solid {theme.BORDER}", "fontFamily": theme.FONT_MONO}
+    head = html.Tr([html.Th(h, style=th) for h in ("channel", "rms", "dominant freq (1/h)")])
+    body = [html.Tr([html.Td(c["target"], style=td), html.Td(f"{c['rms']:.2f}", style=td), html.Td(f"{c['dominant_freq_per_h']:.2f}", style=td)]) for c in q.get("channels", [])]
+    note = "Higher PE order = richer excitation (a single step gives PE≈0). " + (
+        "⚠ run tripped — reduce amplitude or horizon." if getattr(run, "terminated", False) else "Tick this run under 'Runs to include' to export the dataset (excitation metadata is included)."
+    )
+    return html.Div(
+        [
+            html.H5("Excitation quality", style={"margin": f"{theme.SP_2} 0"}),
+            html.Div(cards, style={"display": "flex", "flexWrap": "wrap", "gap": theme.SP_2}),
+            html.Table([html.Thead(head), html.Tbody(body)], style={"borderCollapse": "collapse", "marginTop": theme.SP_2, "fontSize": theme.FS_SM}),
+            html.Div(note, style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginTop": theme.SP_2}),
+        ]
+    )
+
+
 def _scenario(
     loop, horizon, ci, seed, flags, sp_values, sp_ids, mv_values, mv_ids, dist_select, dist_start, name="scenario",
     dist_mags=None, dist_mag_ids=None, solver_method="RK4", rtol=1e-6, atol=1e-8, fixed_step=0.0005, record_every=0, mode="mode1",
@@ -226,6 +253,65 @@ def register_callbacks(app, store) -> None:
         from tep_studio.control.tuning import tuning_rows
 
         return tuning_rows()
+
+    # -- system-identification excitation ---------------------------------
+    @app.callback(
+        Output("exc-targets", "options"),
+        Output("exc-targets", "value"),
+        Input("exc-loop", "value"),
+        prevent_initial_call=True,
+    )
+    def _exc_targets(loop):
+        from tep_studio.ui.config import setpoint_fields
+
+        if loop == "open":
+            opts = [{"label": n, "value": n} for n in TEP_SCHEMA.names("manipulated_variables")]
+            return opts, ["a_feed_valve", "purge_valve"]
+        return [{"label": f, "value": f} for f in setpoint_fields()], ["reactor_pressure", "production_rate"]
+
+    @app.callback(
+        Output("active-run", "data", allow_duplicate=True),
+        Output("session-runs", "data", allow_duplicate=True),
+        Output("exc-status", "children"),
+        Output("exc-banner", "style"),
+        Output("exc-banner", "children"),
+        Output("exc-quality", "children"),
+        Output("exc-run-btn", "disabled", allow_duplicate=True),
+        Input("exc-run-btn", "n_clicks"),
+        State("exc-loop", "value"), State("exc-signal", "value"), State("exc-targets", "value"),
+        State("exc-amp", "value"), State("exc-clock", "value"), State("exc-flow", "value"), State("exc-fhigh", "value"),
+        State("exc-horizon", "value"), State("exc-seed", "value"), State("session-runs", "data"),
+        prevent_initial_call=True,
+    )
+    def run_excitation(n, loop, signal, targets, amp, clock, flow, fhigh, horizon, seed, session):
+        try:
+            from tep_studio.simulation.excitation import SETPOINT_ACTION_BOUNDS, ExcitationSignal, ExcitationSpec, excitation_quality
+
+            targets = targets or []
+            if not targets:
+                raise ValueError("select at least one target to excite")
+            kind = "setpoint" if loop == "closed" else "mv"
+            frac, hz = float(amp or 0.0), float(horizon or 16.0)
+            signals = []
+            for tgt in targets:
+                if kind == "setpoint":
+                    lo, hi = SETPOINT_ACTION_BOUNDS.get(tgt, (0.0, 1.0))
+                    a = frac * (hi - lo) / 2.0
+                else:
+                    a = frac * 50.0  # MV range [0, 100] -> half-range 50
+                signals.append(ExcitationSignal(target=tgt, signal=signal, amplitude=a, clock=float(clock or 0.5), f_low=float(flow or 0.1), f_high=float(fhigh or 2.0)))
+            spec = ExcitationSpec(kind=kind, signals=tuple(signals), seed=int(seed or 0))
+            cfg = ScenarioConfig(name=f"sysid_{signal}", mode="mode1", loop_type=loop, horizon=hz, control_interval=0.01, excitation=spec)
+            cfg.validate()
+            run = service.run_scenario(cfg)
+            store.put(run)
+            session = (session or []) + [run.summary()]
+            q = excitation_quality(spec, horizon=hz, dt=0.01)
+            outcome = f"shutdown at {run.final_time:.2f} h" if run.terminated else f"ran {run.final_time:.1f} h"
+            status = f"{outcome} · peak reactor P = {run.peak.get('reactor_pressure_max', 0):.0f} kPa · run {run.run_id}"
+            return run.run_id, session, status, theme.HIDDEN, "", _exc_quality_view(q, run), False
+        except Exception as exc:
+            return no_update, no_update, "", theme.banner_style("danger"), f"Excitation failed — {exc}", no_update, False
 
     # -- run a simulation -------------------------------------------------
     @app.callback(
@@ -549,7 +635,7 @@ def register_callbacks(app, store) -> None:
         )
 
     # -- disable the Run buttons while a synchronous run is in flight -----
-    for _btn in ("run-btn", "run-batch-btn"):
+    for _btn in ("run-btn", "run-batch-btn", "exc-run-btn"):
         app.clientside_callback(
             "function(n){ return !!n; }",
             Output(_btn, "disabled", allow_duplicate=True),

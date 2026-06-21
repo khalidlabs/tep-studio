@@ -15,6 +15,7 @@ import math
 from dataclasses import dataclass, field
 
 from tep_studio.control.controller import ControllerSetpoints
+from tep_studio.simulation.excitation import SIGNAL_TYPES, ExcitationSpec
 from tep_studio.simulation.schema import TEP_SCHEMA
 
 SCHEMA_VERSION = 1
@@ -63,6 +64,7 @@ class ScenarioConfig:
     manual_mvs: dict[str, float] | None = None  # open loop; None -> nominal u0
     initial_state: tuple[float, ...] | None = None  # full 50-element start state; None -> mode default
     controller_tuning: dict[str, float] | None = None  # closed loop; param-path -> value over the registry defaults
+    excitation: ExcitationSpec | None = None  # system-identification excitation (setpoint or MV signals)
     step_test: StepTestSpec | None = None
 
     # -- derived ----------------------------------------------------------
@@ -122,6 +124,21 @@ class ScenarioConfig:
                 elif not math.isfinite(float(value)):
                     errors.append(f"controller tuning {key} is non-finite")
 
+        if self.excitation is not None:
+            ex = self.excitation
+            if ex.kind not in ("mv", "setpoint"):
+                errors.append(f"excitation.kind must be 'mv' or 'setpoint', got {ex.kind!r}")
+            valid_targets = mv_names if ex.kind == "mv" else sp_fields
+            for sig in ex.signals:
+                if sig.target not in valid_targets:
+                    errors.append(f"excitation target {sig.target!r} is not a valid {ex.kind} target")
+                if sig.signal not in SIGNAL_TYPES:
+                    errors.append(f"excitation signal {sig.signal!r} must be one of {SIGNAL_TYPES}")
+                if not math.isfinite(float(sig.amplitude)) or sig.amplitude < 0:
+                    errors.append(f"excitation amplitude for {sig.target} must be finite and >= 0")
+                if sig.clock <= 0:
+                    errors.append(f"excitation clock for {sig.target} must be > 0")
+
         if self.step_test is not None:
             st = self.step_test
             if st.kind not in ("mv", "setpoint"):
@@ -157,6 +174,7 @@ class ScenarioConfig:
             "manual_mvs": self.manual_mvs,
             "initial_state": list(self.initial_state) if self.initial_state is not None else None,
             "controller_tuning": self.controller_tuning,
+            "excitation": self.excitation.to_dict() if self.excitation else None,
             "step_test": dc.asdict(self.step_test) if self.step_test else None,
         }
 
@@ -185,6 +203,7 @@ class ScenarioConfig:
             manual_mvs=None if d.get("manual_mvs") is None else {k: float(v) for k, v in d["manual_mvs"].items()},
             initial_state=None if d.get("initial_state") is None else tuple(float(x) for x in d["initial_state"]),
             controller_tuning=None if d.get("controller_tuning") is None else {k: float(v) for k, v in d["controller_tuning"].items()},
+            excitation=ExcitationSpec.from_dict(d["excitation"]) if d.get("excitation") else None,
             step_test=StepTestSpec(**d["step_test"]) if d.get("step_test") else None,
         )
         cfg.validate()
