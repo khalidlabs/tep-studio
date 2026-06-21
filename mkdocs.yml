@@ -37,25 +37,32 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
-  - First Simulation: first-simulation.md
-  - Cookbook: cookbook.md
-  - User Guide: user-guide.md
-  - Core Concepts: concepts.md
-  - Architecture: architecture.md
-  - Working with Data: data.md
-  - Gymnasium and RL: gymnasium.md
-  - Optimization: optimization.md
-  - Closed-Loop Control: control.md
-  - Interface (Studio): ui.md
-  - LLM / Agents: agent.md
-  - Validation: validation.md
-  - Comparison: comparison.md
-  - Troubleshooting: troubleshooting.md
-  - Development: development.md
+  - Get Started:
+      - Getting Started: getting-started.md
+      - First Simulation: first-simulation.md
+      - Cookbook: cookbook.md
+  - Guide:
+      - User Guide: user-guide.md
+      - Core Concepts: concepts.md
+      - Architecture: architecture.md
+  - Workflows:
+      - Working with Data: data.md
+      - Gymnasium and RL: gymnasium.md
+      - Optimization: optimization.md
+      - Closed-Loop Control: control.md
+  - Interfaces:
+      - Simulation Studio: ui.md
+      - LLM / Agents: agent.md
   - Reference:
       - Public API: reference/api.md
       - Process Schema: reference/schema.md
+      - Validation: validation.md
+  - Background:
+      - History & Lineage: history.md
+      - Performance Comparison: comparison.md
+  - Help:
+      - Troubleshooting: troubleshooting.md
+      - Development: development.md
 
 markdown_extensions:
   - admonition
