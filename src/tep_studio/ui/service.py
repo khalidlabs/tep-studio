@@ -28,6 +28,7 @@ from tep_studio.control import (
 )
 from tep_studio.control.metrics import MetricsAccumulator
 from tep_studio.control.registry import RICKER_MODE1
+from tep_studio.simulation.excitation import build_mv_action_fn, build_setpoint_schedule
 from tep_studio.ui.config import BatchSpec, ScenarioConfig, StepTestSpec
 from tep_studio.ui.results import BatchResult, RunResult
 
@@ -92,6 +93,19 @@ def initial_state_array(cfg: ScenarioConfig) -> np.ndarray | None:
     return None if cfg.initial_state is None else np.asarray(cfg.initial_state, dtype=float)
 
 
+def excitation_labels(cfg: ScenarioConfig) -> dict[str, object]:
+    """Per-row excitation metadata stamped onto a system-identification dataset (else empty)."""
+    ex = cfg.excitation
+    if ex is None or not ex.signals:
+        return {}
+    return {
+        "excitation.kind": ex.kind,
+        "excitation.signals": "+".join(sorted({s.signal for s in ex.signals})),
+        "excitation.targets": ",".join(s.target for s in ex.signals),
+        "excitation.seed": ex.seed,
+    }
+
+
 # -- schedules -------------------------------------------------------------
 def disturbance_schedule_from(cfg: ScenarioConfig) -> Callable[[float], np.ndarray] | None:
     if not cfg.disturbances:
@@ -109,6 +123,8 @@ def disturbance_schedule_from(cfg: ScenarioConfig) -> Callable[[float], np.ndarr
 
 
 def setpoint_schedule_from(cfg: ScenarioConfig, base: ControllerSetpoints):
+    if cfg.excitation is not None and cfg.excitation.kind == "setpoint":
+        return build_setpoint_schedule(cfg.excitation, base, horizon=cfg.horizon, dt=cfg.control_interval)
     st = cfg.step_test
     if st is None or st.kind != "setpoint":
         return None
@@ -125,6 +141,8 @@ def _open_loop_action_fn(cfg: ScenarioConfig) -> Callable[[float], np.ndarray]:
     state = cfg.initial_state if cfg.initial_state is not None else mode_initial_state(cfg.mode)
     base_mv = np.array(RICKER_MODE1.nominal.u0) if state is None else np.asarray(state[38:50], dtype=float)
     base = TEP_SCHEMA.vector("manipulated_variables", cfg.manual_mvs or {}, base=base_mv)
+    if cfg.excitation is not None and cfg.excitation.kind == "mv":
+        return build_mv_action_fn(cfg.excitation, base, horizon=cfg.horizon, dt=cfg.control_interval, schema=TEP_SCHEMA)
     st = cfg.step_test
     if st is not None and st.kind == "mv":
         idx = TEP_SCHEMA.index("manipulated_variables", st.target)
@@ -172,7 +190,7 @@ def _run_closed(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> 
     )
     if progress:
         progress(0.9, "building outputs")
-    frame = TrajectoryDataset.from_results(result.results, run_id=run_id, scenario_id=cfg.name).to_pandas()
+    frame = TrajectoryDataset.from_results(result.results, run_id=run_id, scenario_id=cfg.name, labels=excitation_labels(cfg)).to_pandas()
     record = json.loads(build_experiment_record(result, controller, simulator=sim, seed=cfg.seed).to_json())
     run = RunResult(
         run_id=run_id,
@@ -227,7 +245,7 @@ def _run_open(cfg: ScenarioConfig, run_id: str, progress: Progress | None) -> Ru
             terminated = True
             break
 
-    frame = TrajectoryDataset.from_results(results, run_id=run_id, scenario_id=cfg.name).to_pandas()
+    frame = TrajectoryDataset.from_results(results, run_id=run_id, scenario_id=cfg.name, labels=excitation_labels(cfg)).to_pandas()
     run = RunResult(
         run_id=run_id,
         scenario=cfg,

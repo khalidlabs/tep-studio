@@ -24,8 +24,10 @@ class TrajectoryDataset:
         run_id: str = "run_000",
         scenario_id: str = "scenario_000",
         schema: ProcessSchema = TEP_SCHEMA,
+        labels: dict[str, object] | None = None,
     ) -> "TrajectoryDataset":
         rows: list[dict[str, object]] = []
+        labels = labels or {}
         measurement_names = schema.names("measurements")
         state_names = schema.names("states")
         mv_names = schema.names("manipulated_variables")
@@ -50,6 +52,7 @@ class TrajectoryDataset:
             row.update({f"implemented_action.{name}": float(value) for name, value in zip(mv_names, result.implemented_action)})
             row.update({f"disturbance.{name}": float(value) for name, value in zip(disturbance_names, result.disturbances)})
             row.update({f"objective.{name}": float(value) for name, value in result.objective_terms.items()})
+            row.update(labels)
             rows.append(row)
         return cls(tuple(rows), schema=schema)
 
