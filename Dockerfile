@@ -28,12 +28,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY . /app
 
-# Upgrade build tooling, install the package (with the UI extra) + gunicorn. This
-# compiles _tep_native.abi3.so into the installed package. The final import line is a
-# BUILD-TIME smoke test: if the kernel didn't compile or the app can't construct, the
-# build fails visibly instead of crash-looping at runtime.
+# Upgrade build tooling, install the package (UI + agent extras) + gunicorn. The
+# agent extra (anthropic, mcp) lets the in-app Assistant work with a user-supplied
+# API key. This compiles _tep_native.abi3.so into the installed package. The final
+# import line is a BUILD-TIME smoke test: if the kernel didn't compile or the app
+# can't construct, the build fails visibly instead of crash-looping at runtime.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir ".[ui]" gunicorn \
+    && pip install --no-cache-dir ".[ui,agent]" gunicorn \
     && python -c "import tep_studio, tep_studio.simulation.native; from tep_studio.ui import create_app; create_app()"
 
 # --- Switch to the non-root runtime user ---
