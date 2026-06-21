@@ -413,6 +413,21 @@ def register_callbacks(app, store) -> None:
         sp = mode_default_setpoints(mode or "mode1")
         return [round(float(sp[i["name"]]), 3) for i in sp_ids]
 
+    # -- reset the Advanced overrides when the mode changes, so each mode runs from
+    # its own clean config (a custom initial state / edited tuning left over from a
+    # previous mode must not leak into the new mode's run).
+    @app.callback(
+        Output("initial-state-source", "value", allow_duplicate=True),
+        Output("initial-state-text", "value", allow_duplicate=True),
+        Output("tuning-table", "data", allow_duplicate=True),
+        Input("mode-select", "value"),
+        prevent_initial_call=True,
+    )
+    def _reset_overrides_on_mode_change(mode):
+        from tep_studio.control.tuning import tuning_rows
+
+        return "mode", "", tuning_rows()
+
     # -- RunStore capacity / eviction indicator ---------------------------
     @app.callback(Output("store-capacity", "children"), Output("store-capacity", "style"), Input("session-runs", "data"))
     def _capacity(session):
