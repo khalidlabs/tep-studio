@@ -80,6 +80,27 @@ def test_respond_runs_tools_and_reports_created_runs():
     assert turn.history[-1]["content"][0]["type"] == "text"
 
 
+def test_setpoint_catalog_is_grounded():
+    info = TepToolset().describe_plant()
+    sp = {s["name"]: s for s in info["setpoints"]}
+    pr = sp["production_rate"]
+    assert pr["measured_as"] == "stripper_underflow"  # the setpoint↔measurement bridge
+    assert pr["unit"] == "m3/h"
+    assert pr["nominal_mode1"] and pr["nominal_mode1"] > 0
+    assert "rate-limited" in pr["note"].lower()
+    # measurements now carry descriptions for grounding
+    assert "description" in info["measurements"][0]
+
+
+def test_get_run_series_accepts_setpoint_name():
+    ts = TepToolset()
+    run_id = ts.run_scenario(_tiny_closed())["run_id"]
+    # asking by the setpoint name resolves to its measured column (stripper_underflow)
+    out = ts.get_run_series(run_id, ["production_rate"])
+    assert out["ok"] is True
+    assert "production_rate" in out["series"]
+
+
 def test_make_client_requires_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
