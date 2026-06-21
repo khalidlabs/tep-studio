@@ -381,14 +381,19 @@ def register_callbacks(app, store) -> None:
         return traj, mv
 
     # -- keep run-derived lists in sync with the session ------------------
+    # Also refire on tab / dataset-sub-tab switches: the dataset-runs / compare /
+    # record components mount lazily with their tab, so a session change while their
+    # tab is hidden would otherwise be lost until the next session change.
     @app.callback(
         Output("dataset-runs", "options"),
         Output("compare-table", "data"),
         Output("compare-table", "columns"),
         Output("record-run", "options"),
         Input("session-runs", "data"),
+        Input("tabs", "value"),
+        Input("dataset-tabs", "value"),
     )
-    def _update_run_lists(session):
+    def _update_run_lists(session, _main_tab=None, _dataset_tab=None):
         session = session or []
         options = [{"label": f"{s['name']} ({s['run_id']})", "value": s["run_id"]} for s in session]
         keys = ("run_id", "name", "loop_type", "terminated", "final_time", "peak_reactor_pressure", "iae_reactor_pressure", "ise_reactor_pressure", "time_to_shutdown")
