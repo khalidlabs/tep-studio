@@ -45,6 +45,51 @@ _COLUMN_PREFIXES = (
     "objective",
 )
 
+# Closed-loop setpoint metadata: each operator target, the measurement it is
+# regulated to (``measured_as`` — often a *different* name than the setpoint, which
+# is why naive lookups fail), its unit, and behaviour notes. Sourced from the Ricker
+# controller's loop pairings (control/controller.py, control/registry.py).
+_SETPOINT_INFO = {
+    "reactor_level": {"measured_as": "reactor_level", "unit": "%", "note": "reactor liquid level"},
+    "reactor_pressure": {"measured_as": "reactor_pressure", "unit": "kPa gauge", "note": "reactor pressure; the plant trips at ~3000 kPa"},
+    "reactor_temperature": {"measured_as": "reactor_temperature", "unit": "deg C", "note": "reactor temperature"},
+    "separator_level": {"measured_as": "separator_level", "unit": "%", "note": "separator liquid level"},
+    "stripper_level": {"measured_as": "stripper_level", "unit": "%", "note": "stripper liquid level"},
+    "pct_g": {"measured_as": "stripper_underflow_G_concentration", "unit": "mol %", "note": "%G in the product; needs enable_pct_g_feedback (off by default)"},
+    "production_rate": {
+        "measured_as": "stripper_underflow",
+        "unit": "m3/h",
+        "note": "plant throughput = stripper underflow (stream 11). SLOW, rate-limited setpoint: it ramps gradually toward the target, so give it a long horizon to arrive.",
+    },
+    "ya": {"measured_as": None, "unit": "mol %", "note": "reactor-feed mol% A (derived from feed analysis; no single measurement column)"},
+    "yac": {"measured_as": None, "unit": "mol %", "note": "reactor-feed mol% A+C (derived; no single measurement column)"},
+}
+
+# Setpoint name -> the frame column that measures it (for get_run_series aliasing).
+_SETPOINT_TO_COLUMN = {k: f"measurement.{v['measured_as']}" for k, v in _SETPOINT_INFO.items() if v.get("measured_as")}
+
+
+def _setpoint_catalog() -> list[dict]:
+    """Setpoint fields enriched with unit, Mode-1 nominal, measured-as column, and notes."""
+    import dataclasses as _dc
+
+    from tep_studio.simulation.modes import mode_setpoints
+
+    nominal = _dc.asdict(mode_setpoints("mode1"))
+    catalog = []
+    for name in setpoint_fields():
+        info = _SETPOINT_INFO.get(name, {})
+        catalog.append(
+            {
+                "name": name,
+                "unit": info.get("unit"),
+                "nominal_mode1": round(float(nominal[name]), 3) if name in nominal else None,
+                "measured_as": info.get("measured_as"),
+                "note": info.get("note"),
+            }
+        )
+    return catalog
+
 INSTRUCTIONS = """\
 TEP Studio — drive the modified Tennessee Eastman Process simulator by tool calls.
 
@@ -62,6 +107,12 @@ Key facts to reason with:
   (~3000 kPa) within ~1 h. Use loop_type="closed" (the built-in Ricker PI
   controller) for runs that survive the horizon.
 - IDV disturbances are LATCHED: once activated at `start_time` they stay on.
+- Setpoints are closed-loop targets (see describe_plant.setpoints for unit, Mode-1
+  nominal, and the `measured_as` signal). `production_rate` is the stripper-underflow
+  throughput (m3/h) and is SLOW/rate-limited — give it a long horizon to reach a new
+  value. A setpoint's measured signal often has a different name (its `measured_as`,
+  e.g. production_rate -> stripper_underflow); get_run_series also accepts the
+  setpoint name and maps it for you.
 - Always report the exact config you ran (it is returned for reproducibility).
 - Keep horizons modest (a few to a few tens of hours) for interactive use.
 """
@@ -110,12 +161,15 @@ class TepToolset:
             "manipulated_variables": [
                 {"name": n, "unit": u, "description": d} for n, u, d in list_manipulated_variables()
             ],
-            "measurements": [{"name": n, "unit": u} for n, u, _ in list_measurements()],
-            "setpoints": list(setpoint_fields()),
+            "measurements": [{"name": n, "unit": u, "description": d} for n, u, d in list_measurements()],
+            "setpoints": _setpoint_catalog(),
             "scenario_config_fields": _SCENARIO_CONFIG_FIELDS,
             "notes": (
                 "mode1 is open-loop unstable (trips ~3000 kPa within ~1 h); use loop_type='closed'. "
-                "IDV disturbances are latched. magnitude in 0..1, MVs in 0..100%."
+                "IDV disturbances are latched. magnitude in 0..1, MVs in 0..100%. "
+                "Setpoints are closed-loop targets; a setpoint's measured signal is its 'measured_as' "
+                "column (e.g. production_rate -> measurement.stripper_underflow). production_rate is "
+                "slow/rate-limited — allow a long horizon for it to reach a new target."
             ),
         }
 
@@ -315,9 +369,17 @@ class TepToolset:
 
 
 def _resolve_column(columns: list[str], var: str) -> str | None:
-    """Map a requested variable to an actual frame column (full, bare, or 'time')."""
+    """Map a requested variable to an actual frame column.
+
+    Accepts a full column, a bare measurement name, a closed-loop **setpoint name**
+    (mapped to the signal it regulates, e.g. ``production_rate`` ->
+    ``measurement.stripper_underflow``), or ``time``.
+    """
     if var in columns:
         return var
+    alias = _SETPOINT_TO_COLUMN.get(var)
+    if alias and alias in columns:
+        return alias
     for prefix in _COLUMN_PREFIXES:
         candidate = f"{prefix}.{var}"
         if candidate in columns:
