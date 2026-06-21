@@ -237,6 +237,7 @@ def _excitation_card() -> html.Div:
                 style=theme.ROW,
             ),
             html.Div(id="exc-quality", style={"marginTop": theme.SP_2}),
+            dcc.Loading(dcc.Graph(id="exc-graph", config=theme.GRAPH_CONFIG, style={"height": "540px", "marginTop": theme.SP_2})),
         ],
         style=theme.CARD,
     )
@@ -279,12 +280,22 @@ def _dataset_tab() -> html.Div:
                     ], style={"marginTop": theme.SP_2}),
                     dcc.Download(id="batch-dataset-download"),
                     dcc.Download(id="batch-metrics-download"),
+                    dcc.Loading(dcc.Graph(id="batch-coverage-graph", config=theme.GRAPH_CONFIG, style={"height": "340px", "marginTop": theme.SP_2})),
                 ],
                 style={**theme.CARD, **theme.COL_RIGHT},
             ),
                 ],
                 className="tep-row",
                 style=theme.ROW,
+            ),
+            html.Div(
+                [
+                    html.H4("Export preview", style={"marginTop": 0}),
+                    html.Div("Overlay one variable across the runs ticked in 'Runs to include', before downloading.", style={"fontSize": theme.FS_SM, "color": theme.TEXT_MUTED, "marginBottom": theme.SP_2}),
+                    _field("Variable", dcc.Dropdown(id="dataset-preview-var", options=measurement_options(), value="measurement.reactor_pressure", clearable=False)),
+                    dcc.Loading(dcc.Graph(id="dataset-preview-graph", config=theme.GRAPH_CONFIG, style={"height": "380px"})),
+                ],
+                style=theme.CARD,
             ),
         ],
     )
