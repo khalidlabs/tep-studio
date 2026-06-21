@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses as dc
 import itertools
 import json
+import math
 from dataclasses import dataclass, field
 
 from tep_studio.control.controller import ControllerSetpoints
@@ -60,6 +61,8 @@ class ScenarioConfig:
     enable_overrides: bool = True  # high-pressure/level overrides are a safety function: on by default
     enable_pct_g_feedback: bool = False
     manual_mvs: dict[str, float] | None = None  # open loop; None -> nominal u0
+    initial_state: tuple[float, ...] | None = None  # full 50-element start state; None -> mode default
+    controller_tuning: dict[str, float] | None = None  # closed loop; param-path -> value over the registry defaults
     step_test: StepTestSpec | None = None
 
     # -- derived ----------------------------------------------------------
@@ -103,6 +106,22 @@ class ScenarioConfig:
                 elif not 0.0 <= value <= 100.0:
                     errors.append(f"MV {key} value {value} out of [0,100]")
 
+        if self.initial_state is not None:
+            if len(self.initial_state) != 50:
+                errors.append(f"initial_state must have 50 elements, got {len(self.initial_state)}")
+            elif not all(math.isfinite(float(x)) for x in self.initial_state):
+                errors.append("initial_state contains non-finite values")
+
+        if self.controller_tuning:
+            from tep_studio.control.tuning import tuning_defaults
+
+            known = set(tuning_defaults())
+            for key, value in self.controller_tuning.items():
+                if key not in known:
+                    errors.append(f"unknown controller tuning parameter {key!r}")
+                elif not math.isfinite(float(value)):
+                    errors.append(f"controller tuning {key} is non-finite")
+
         if self.step_test is not None:
             st = self.step_test
             if st.kind not in ("mv", "setpoint"):
@@ -136,6 +155,8 @@ class ScenarioConfig:
             "enable_overrides": self.enable_overrides,
             "enable_pct_g_feedback": self.enable_pct_g_feedback,
             "manual_mvs": self.manual_mvs,
+            "initial_state": list(self.initial_state) if self.initial_state is not None else None,
+            "controller_tuning": self.controller_tuning,
             "step_test": dc.asdict(self.step_test) if self.step_test else None,
         }
 
@@ -162,6 +183,8 @@ class ScenarioConfig:
             enable_overrides=bool(d.get("enable_overrides", False)),
             enable_pct_g_feedback=bool(d.get("enable_pct_g_feedback", False)),
             manual_mvs=None if d.get("manual_mvs") is None else {k: float(v) for k, v in d["manual_mvs"].items()},
+            initial_state=None if d.get("initial_state") is None else tuple(float(x) for x in d["initial_state"]),
+            controller_tuning=None if d.get("controller_tuning") is None else {k: float(v) for k, v in d["controller_tuning"].items()},
             step_test=StepTestSpec(**d["step_test"]) if d.get("step_test") else None,
         )
         cfg.validate()
