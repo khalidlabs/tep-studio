@@ -12,6 +12,8 @@ from dash import dash_table, dcc, html
 from tep_studio.control.tuning import tuning_rows
 from tep_studio.ui import theme
 from tep_studio.ui.config import setpoint_fields
+from tep_studio.simulation.schema import TEP_SCHEMA
+from tep_studio.ui.about_content import ABOUT_SECTIONS
 from tep_studio.ui.widgets import (
     DEFAULT_PLOT_VARS,
     disturbance_options,
@@ -267,111 +269,116 @@ def _record_tab() -> html.Div:
     )
 
 
-def _about_page() -> html.Div:
-    """A standalone information page on the Tennessee Eastman process (routed at /about)."""
-    h2 = {"color": theme.TITLE, "fontSize": theme.FS_XL, "fontWeight": "600", "marginTop": theme.SP_5, "marginBottom": theme.SP_2}
-    h3 = {"color": theme.TITLE, "fontSize": theme.FS_LG, "fontWeight": "600", "marginTop": theme.SP_4, "marginBottom": theme.SP_1}
-    para = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginBottom": theme.SP_2}
-    ul = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginTop": 0, "marginBottom": theme.SP_2, "paddingLeft": "20px"}
-    mono = {"fontFamily": theme.FONT_MONO, "fontSize": theme.FS_SM, "background": theme.SURFACE_ALT, "padding": "10px 12px", "borderRadius": theme.RADIUS_SM, "lineHeight": "1.8", "margin": f"0 0 {theme.SP_2} 0", "whiteSpace": "pre", "overflowX": "auto"}
+_ABOUT_H3 = {"color": theme.TITLE, "fontSize": theme.FS_LG, "fontWeight": "600", "marginTop": theme.SP_4, "marginBottom": theme.SP_1}
+_ABOUT_PARA = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginBottom": theme.SP_2}
+_ABOUT_NOTE = {"color": theme.TEXT_MUTED, "fontSize": theme.FS_SM, "lineHeight": "1.55", "marginBottom": theme.SP_2}
+_ABOUT_UL = {"color": theme.TEXT, "fontSize": theme.FS_MD, "lineHeight": "1.65", "marginTop": 0, "marginBottom": theme.SP_2, "paddingLeft": "20px"}
+_ABOUT_MONO = {"fontFamily": theme.FONT_MONO, "fontSize": theme.FS_SM, "background": theme.SURFACE_ALT, "padding": "10px 12px", "borderRadius": theme.RADIUS_SM, "lineHeight": "1.8", "margin": "0 0 " + theme.SP_2 + " 0", "whiteSpace": "pre", "overflowX": "auto"}
 
+
+def _render_blocks(blocks: list) -> list:
+    """Render the verified About-page content blocks (see ui.about_content) to Dash nodes."""
+    out: list = []
+    for b in blocks:
+        kind = b.get("type")
+        if kind == "subheading":
+            out.append(html.H3(b.get("text", ""), style=_ABOUT_H3))
+        elif kind == "para":
+            out.append(html.P(b.get("text", ""), style=_ABOUT_PARA))
+        elif kind == "note":
+            out.append(html.P(b.get("text", ""), style=_ABOUT_NOTE))
+        elif kind == "reactions":
+            out.append(html.Div(chr(10).join(b.get("lines", [])), style=_ABOUT_MONO))
+        elif kind == "bullets":
+            items = []
+            for it in b.get("items", []):
+                term = it.get("term") or ""
+                if term:
+                    items.append(html.Li([html.B(term + " \u2014 "), it.get("text", "")]))
+                else:
+                    items.append(html.Li(it.get("text", "")))
+            out.append(html.Ul(items, style=_ABOUT_UL))
+    return out
+
+
+def _schema_table(category: str, table_id: str, *, page_size: int = 10) -> dash_table.DataTable:
+    """A sortable, filterable reference table of one schema category (name / unit / description)."""
+    rows = []
+    for i, name in enumerate(TEP_SCHEMA.names(category), start=1):
+        var = TEP_SCHEMA.variable(category, name)
+        rows.append({"#": i, "variable": name, "unit": getattr(var, "unit", "") or "", "description": getattr(var, "description", "") or ""})
+    return dash_table.DataTable(
+        id=table_id,
+        data=rows,
+        columns=[{"name": "#", "id": "#"}, {"name": "variable", "id": "variable"}, {"name": "unit", "id": "unit"}, {"name": "description", "id": "description"}],
+        page_size=page_size,
+        sort_action="native",
+        filter_action="native",
+        style_table={"overflowX": "auto", "marginBottom": theme.SP_3},
+        style_header={"backgroundColor": theme.SURFACE_ALT, "fontWeight": "600", "border": "1px solid " + theme.BORDER},
+        style_cell={"fontSize": theme.FS_SM, "padding": "6px 10px", "fontFamily": theme.FONT_FAMILY, "border": "1px solid " + theme.BORDER, "textAlign": "left", "whiteSpace": "normal", "height": "auto", "maxWidth": "440px"},
+        style_cell_conditional=[
+            {"if": {"column_id": "#"}, "width": "44px"},
+            {"if": {"column_id": "variable"}, "fontFamily": theme.FONT_MONO},
+            {"if": {"column_id": "unit"}, "width": "84px"},
+        ],
+    )
+
+
+def _about_variables() -> html.Div:
+    sub = {"color": theme.TITLE, "fontSize": theme.FS_LG, "fontWeight": "600", "marginTop": theme.SP_4, "marginBottom": theme.SP_1}
     return html.Div(
         [
-            dcc.Link("← Back to the studio", href="/", style={"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500"}),
-            html.H1("The Tennessee Eastman Process", style={"color": theme.TITLE, "fontSize": "26px", "fontWeight": "700", "marginTop": theme.SP_3, "marginBottom": theme.SP_2}),
-            html.P(
-                "The Tennessee Eastman Process (TEP) is a realistic, open-loop-unstable model of an industrial "
-                "chemical plant. It was published by Downs and Vogel (1993) as a plant-wide control and monitoring "
-                "challenge — a real Eastman Chemical process with the proprietary chemistry and components disguised. "
-                "It has since become the standard testbed for process control, fault detection and diagnosis, and, more "
-                "recently, reinforcement learning.",
-                style=para,
-            ),
-
-            html.H2("The plant", style=h2),
-            html.P("Five unit operations, linked by a tight gas recycle:", style=para),
-            html.Ul(
-                [
-                    html.Li([html.B("Reactor"), " — a two-phase, exothermic gas–liquid reactor where the products form; cooled by internal cooling water."]),
-                    html.Li([html.B("Condenser"), " — partially condenses the reactor effluent."]),
-                    html.Li([html.B("Vapour–liquid separator"), " — splits condensed liquid from the uncondensed gas."]),
-                    html.Li([html.B("Recycle compressor"), " — returns unreacted gas to the reactor."]),
-                    html.Li([html.B("Product stripper"), " — strips remaining light components; the liquid products leave its base."]),
-                ],
-                style=ul,
-            ),
-            html.P("Non-condensable gas and the inert component are vented through a purge to keep pressure and inerts in check.", style=para),
-
-            html.H2("Chemistry", style=h2),
-            html.P("Four irreversible, exothermic, gas-phase reactions convert gaseous reactants into two liquid products plus a byproduct:", style=para),
-            html.Div("A + C + D  →  G   (liquid product)\nA + C + E  →  H   (liquid product)\nA + E      →  F   (byproduct)\n3 D        →  2 F  (byproduct)", style=mono),
-            html.P(
-                "Eight components: reactants A, C, D, E; inert B; byproduct F; products G and H. Rates follow Arrhenius "
-                "kinetics, so the reactor temperature shifts product selectivity — lower temperature favours G, higher favours H.",
-                style=para,
-            ),
-
-            html.H2("Feeds, products, and operating modes", style=h2),
-            html.P(
-                "Four gaseous feeds enter the loop — pure A, pure D, pure E, and a combined A+C stream. Production is the "
-                "liquid G/H leaving the stripper. The economics of a run are set by the G:H mass ratio and the production "
-                "rate, which define six standard operating modes:",
-                style=para,
-            ),
-            html.Ul(
-                [
-                    html.Li("50/50 G:H — at base rate (Mode 1) and at maximum rate (Mode 4)"),
-                    html.Li("10/90 G:H — at base rate (Mode 2) and at maximum rate (Mode 5)"),
-                    html.Li("90/10 G:H — at base rate (Mode 3) and at maximum rate (Mode 6)"),
-                ],
-                style=ul,
-            ),
-
-            html.H2("Variables", style=h2),
-            html.Ul(
-                [
-                    html.Li([html.B("41 measurements (XMEAS)"), " — 22 sampled continuously (flows, levels, pressures, temperatures) and 19 composition readings from gas chromatographs on the reactor feed, the purge, and the product, with realistic analyzer dead time."]),
-                    html.Li([html.B("12 manipulated variables (XMV)"), " — the feed, purge, and product valves; the recycle and stripper-steam valves; the reactor and condenser cooling-water valves; and the reactor agitator speed."]),
-                    html.Li([html.B("Process disturbances (IDV)"), " — 20 in the original problem (feed-composition steps, reaction-kinetics drift, sticking valves, loss of A feed, …); this simulator exposes 28."]),
-                ],
-                style=ul,
-            ),
-
-            html.H2("The control challenge", style=h2),
-            html.P(
-                "The plant is open-loop unstable: with the valves held fixed it trips within about an hour. A controller "
-                "must hold it inside hard operating limits — reactor pressure below roughly 3000 kPa, bounded "
-                "temperatures and liquid levels — or a safety interlock shuts the plant down, all while minimizing "
-                "operating cost and rejecting disturbances. The tight material recycle couples every unit, so single-loop "
-                "tuning interacts plant-wide. That combination of instability, hard constraints, and interaction is what "
-                "makes the TEP a demanding and enduring benchmark.",
-                style=para,
-            ),
-
-            html.H2("How the TEP is used", style=h2),
-            html.Ul(
-                [
-                    html.Li([html.B("Fault detection & diagnosis"), " — the canonical labeled benchmark (fault-free plus per-disturbance datasets)."]),
-                    html.Li([html.B("Control benchmarking"), " — PID, decentralized multiloop, and model-predictive control."]),
-                    html.Li([html.B("Reinforcement learning"), " — a hard, safety-constrained continuous-control environment."]),
-                    html.Li([html.B("Operator training & plant-wide research"), " — multimode operation, transfer learning, and real-time optimization."]),
-                ],
-                style=ul,
-            ),
-
-            html.H2("In this studio", style=h2),
-            html.P(
-                "Run any of the six operating modes open- or closed-loop, inject timed disturbances, edit the initial "
-                "state and the controller tuning, compare runs side by side, and export tidy datasets for machine "
-                "learning — all from the Simulate, Dataset, Compare, and Metrics / Record tabs.",
-                style=para,
-            ),
-
-            html.Hr(style={"border": "none", "borderTop": f"1px solid {theme.BORDER}", "margin": f"{theme.SP_5} 0 {theme.SP_3}"}),
-            html.P("Reference: J. J. Downs and E. F. Vogel, “A plant-wide industrial process control problem,” Computers & Chemical Engineering 17(3), 1993.", style={**para, "fontSize": theme.FS_SM, "color": theme.TEXT_MUTED}),
-            dcc.Link("← Back to the studio", href="/", style={"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500"}),
+            html.P("Every variable the simulator exposes, grouped by role. The tables are sortable and filterable \u2014 type in a column filter to search.", style=_ABOUT_NOTE),
+            html.H3("Manipulated variables (12)", style=sub),
+            html.P("The valve and agitator setpoints a controller can move.", style=_ABOUT_NOTE),
+            _schema_table("manipulated_variables", "about-mv-table", page_size=12),
+            html.H3("Measurements (41)", style=sub),
+            html.P("22 continuous process measurements plus 19 sampled stream compositions.", style=_ABOUT_NOTE),
+            _schema_table("measurements", "about-meas-table"),
+            html.H3("States (50)", style=sub),
+            html.P("The internal model state: component holdups and energies across the units, plus the 12 valve positions.", style=_ABOUT_NOTE),
+            _schema_table("states", "about-state-table"),
+            html.H3("Disturbances (28)", style=sub),
+            html.P("Selectable fault modes (IDVs) for disturbance-rejection and fault-detection studies.", style=_ABOUT_NOTE),
+            _schema_table("disturbances", "about-dist-table"),
         ],
-        style={**theme.CARD, "maxWidth": "820px", "margin": "0 auto", "padding": "24px 32px 32px"},
+        style={"paddingTop": theme.SP_3},
+    )
+
+
+def _about_back_link() -> dcc.Link:
+    return dcc.Link("\u2190 Back to the studio", href="/", style={"color": theme.PRIMARY, "textDecoration": "none", "fontSize": theme.FS_MD, "fontWeight": "500"})
+
+
+def _about_section(key: str) -> html.Div:
+    return html.Div(_render_blocks(ABOUT_SECTIONS[key]["blocks"]), style={"paddingTop": theme.SP_3})
+
+
+def _about_page() -> html.Div:
+    """A standalone, multi-section information page on the TEP (routed at /about)."""
+    tab = dict(style=theme.TAB, selected_style=theme.TAB_SELECTED)
+    return html.Div(
+        [
+            _about_back_link(),
+            html.H1("The Tennessee Eastman Process", style={"color": theme.TITLE, "fontSize": "26px", "fontWeight": "700", "marginTop": theme.SP_3, "marginBottom": theme.SP_2}),
+            dcc.Tabs(
+                id="about-tabs",
+                value="overview",
+                children=[
+                    dcc.Tab(label="Overview", value="overview", children=_about_section("overview"), **tab),
+                    dcc.Tab(label="Plant & chemistry", value="plant", children=_about_section("plant"), **tab),
+                    dcc.Tab(label="Variables", value="variables", children=_about_variables(), **tab),
+                    dcc.Tab(label="Control strategy", value="control", children=_about_section("control"), **tab),
+                    dcc.Tab(label="Using the studio", value="usage", children=_about_section("usage"), **tab),
+                ],
+                style={"marginTop": theme.SP_3, "marginBottom": theme.SP_3},
+            ),
+            html.Hr(style={"border": "none", "borderTop": "1px solid " + theme.BORDER, "margin": theme.SP_4 + " 0 " + theme.SP_3}),
+            html.P("Reference: J. J. Downs and E. F. Vogel, \u201cA plant-wide industrial process control problem,\u201d Computers & Chemical Engineering 17(3), 1993.", style={**_ABOUT_NOTE, "fontStyle": "italic"}),
+            _about_back_link(),
+        ],
+        style={**theme.CARD, "maxWidth": "920px", "margin": "0 auto", "padding": "24px 32px 32px"},
     )
 
 
