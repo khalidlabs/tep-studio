@@ -54,10 +54,15 @@ ui = [
   "pyarrow>=14",
   "comm>=0.2",
 ]
+agent = [
+  "mcp>=1.2",
+  "anthropic>=0.40",
+]
 
 [project.scripts]
 tep = "tep_studio.cli:main"
 tep-ui = "tep_studio.ui.__main__:main"
+tep-mcp = "tep_studio.agent.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/khalidlabs/tep-studio"
