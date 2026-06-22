@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
 import platform
+import subprocess
 import sys
 import time
 from typing import Iterable
@@ -276,6 +277,64 @@ def _row(
     return row
 
 
+_UNDECLARED = "not_declared_in_repository"
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _git(*args: str) -> str | None:
+    """Best-effort ``git`` query rooted at the repository; ``None`` outside a checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), *args],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def _repository_url() -> str:
+    """Resolve the source URL from the git remote, falling back to package metadata."""
+    remote = _git("config", "--get", "remote.origin.url")
+    if remote:
+        url = remote.removesuffix(".git")
+        if url.startswith("git@github.com:"):
+            url = "https://github.com/" + url[len("git@github.com:") :]
+        return url
+    try:
+        project_urls = metadata.metadata("tep-studio").get_all("Project-URL") or []
+    except metadata.PackageNotFoundError:
+        return _UNDECLARED
+    for entry in project_urls:
+        label, _, value = entry.partition(",")
+        if label.strip().lower() in {"source", "repository", "homepage"}:
+            return value.strip()
+    return _UNDECLARED
+
+
+def _commit_hash() -> str:
+    commit = _git("rev-parse", "HEAD")
+    if not commit:
+        return _UNDECLARED
+    return f"{commit}-dirty" if _git("status", "--porcelain") else commit
+
+
+def _source_revision() -> str:
+    """Human-readable revision tag, e.g. ``v0.2.0-2-ga46d76d`` or ``...-dirty``."""
+    return _git("describe", "--tags", "--always", "--dirty") or _UNDECLARED
+
+
+def _license_identifier() -> str:
+    try:
+        first_line = (REPO_ROOT / "LICENSE").read_text(encoding="utf-8").splitlines()[0].strip()
+    except (OSError, IndexError):
+        first_line = ""
+    return first_line or _UNDECLARED
+
+
 def _reproducibility_metadata() -> dict[str, object]:
     packages = {}
     for package_name in ("tep-studio", "cffi", "numpy", "scipy", "pandas", "gymnasium", "matplotlib"):
@@ -296,10 +355,11 @@ def _reproducibility_metadata() -> dict[str, object]:
         "random_seed_convention": "Seed is passed to the native TEP reset routine when supplied.",
         "build_command": "python3 setup.py build_ext --inplace",
         "test_command": "PYTHONPATH=src python3 -m pytest -q",
-        "repository_url": "not_declared_in_repository",
-        "commit_hash": "not_declared_in_repository",
-        "license": "not_declared_in_repository",
-        "archived_release": "not_declared_in_repository",
+        "repository_url": _repository_url(),
+        "commit_hash": _commit_hash(),
+        "source_revision": _source_revision(),
+        "license": _license_identifier(),
+        "archived_release": "pending_public_archive_before_submission",
     }
 
 

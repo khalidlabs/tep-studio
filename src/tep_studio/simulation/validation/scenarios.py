@@ -58,9 +58,12 @@ def adchem_solver_independence() -> Scenario:
         name="adchem_solver_independence",
         description=(
             "Mode 1 open-loop disturbance case inspired by ADCHEM 2015: stream 4 composition "
-            "and reactor cooling-water inlet disturbance flags with reactor coolant valve slope. "
-            "The original ADCHEM disturbance-recalculation flag is tracked as an intended reference "
-            "but not enabled in the current native Python kernel validation run."
+            "and reactor cooling-water inlet disturbance flags (IDV 8 and 11) with a reactor "
+            "coolant valve ramp. Under both RK23 and RK45 the run reaches a high separator "
+            "liquid level shutdown near 1.9 h, and the two solvers are compared for "
+            "reactor-pressure agreement. The original ADCHEM disturbance-recalculation flag "
+            "(ms_flag=96) is tracked as an intended reference but not enabled in the current "
+            "native Python kernel validation run."
         ),
         horizon_h=2.0,
         sample_period_h=0.01,
@@ -68,7 +71,15 @@ def adchem_solver_independence() -> Scenario:
         ms_flag=0x0F,
         disturbances=disturbances,
         action_policy=coolant_slope,
-        expected={"terminated": False, "intended_reference_ms_flag": 96, "current_ms_flag": 0x0F},
+        expected={
+            "terminated": True,
+            "shutdown_message_contains": "Separator Liquid Level",
+            "shutdown_time_min_h": 1.7,
+            "shutdown_time_max_h": 2.0,
+            "solver_reactor_pressure_rmse_max": 1.0e-2,
+            "intended_reference_ms_flag": 96,
+            "current_ms_flag": 0x0F,
+        },
     )
 
 
