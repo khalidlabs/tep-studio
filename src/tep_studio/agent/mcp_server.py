@@ -6,7 +6,7 @@ process-local store; the server factory (:func:`build_server`) and entry point
 unit-testable without the ``mcp`` SDK installed.
 
 Run with the ``tep-mcp`` console script (stdio transport) after ``pip install
-".[agent]"``. Point any MCP client at it, e.g. Claude Desktop:
+".[agent]"``. Point any MCP client at it via the standard mcpServers config:
 
     {"mcpServers": {"tep-studio": {"command": "tep-mcp"}}}
 """

@@ -13,7 +13,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "para",
-                "text": "The plant has five major units — a reactor, a condenser, a vapor/liquid separator, a recycle compressor, and a product stripper — fed by four input streams and producing two liquid products (G and H) alongside a byproduct (F) and an inert (B) that must be purged."
+                "text": "The plant has five major units (a reactor, a condenser, a vapor/liquid separator, a recycle compressor, and a product stripper), fed by four input streams and producing two liquid products (G and H) alongside a byproduct (F) and an inert (B) that must be purged."
             },
             {
                 "type": "subheading",
@@ -40,7 +40,7 @@ ABOUT_SECTIONS = {
                     },
                     {
                         "term": "Reinforcement learning",
-                        "text": "A high-dimensional, partially observed, safety-constrained control environment with delayed consequences — a demanding RL benchmark."
+                        "text": "A high-dimensional, partially observed, safety-constrained control environment with delayed consequences. A demanding RL benchmark."
                     }
                 ]
             },
@@ -92,7 +92,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "note",
-                "text": "Run with no active control and the plant trips on a safety limit within roughly an hour — keeping it alive is the point of the exercise."
+                "text": "Run with no active control and the plant trips on a safety limit within roughly an hour. Keeping it alive is the point of the exercise."
             }
         ]
     },
@@ -142,7 +142,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "para",
-                "text": "Four irreversible, exothermic, gas-phase reactions occur in the reactor — two forming liquid products, two forming byproduct:"
+                "text": "Four irreversible, exothermic, gas-phase reactions occur in the reactor. Two form liquid products, two form byproduct:"
             },
             {
                 "type": "reactions",
@@ -189,7 +189,7 @@ ABOUT_SECTIONS = {
         "blocks": [
             {
                 "type": "para",
-                "text": "The plant is open-loop unstable — left alone it trips on reactor pressure within about an hour. TEP Studio holds it with a built-in decentralized multiloop PI strategy: a set of simple, single-input single-output PI loops, each governing one part of the plant, that together keep inventories, temperature, and pressure inside their trip limits while delivering the requested product. There is no central optimizer; the loops are tuned to cooperate."
+                "text": "The plant is open-loop unstable: left alone it trips on reactor pressure within about an hour. TEP Studio holds it with a built-in decentralized multiloop PI strategy: a set of simple, single-input single-output PI loops, each governing one part of the plant, that together keep inventories, temperature, and pressure inside their trip limits while delivering the requested product. There is no central optimizer; the loops are tuned to cooperate."
             },
             {
                 "type": "subheading",
@@ -212,7 +212,7 @@ ABOUT_SECTIONS = {
                     },
                     {
                         "term": "Inventory cascades",
-                        "text": "Liquid levels are held without letting any vessel run dry or flood. The reactor-level loop does not move a valve directly — it sets the separator-temperature target (a cascade), and a faster separator-temperature loop then drives the condenser cooling-water valve. The separator-level and stripper-level loops adjust their own underflow ratios (r6 and r7), tightening the link between level and draw-off."
+                        "text": "Liquid levels are held without letting any vessel run dry or flood. The reactor-level loop does not move a valve directly; it sets the separator-temperature target (a cascade), and a faster separator-temperature loop then drives the condenser cooling-water valve. The separator-level and stripper-level loops adjust their own underflow ratios (r6 and r7), tightening the link between level and draw-off."
                     },
                     {
                         "term": "Reactor temperature → reactor cooling",
@@ -224,7 +224,7 @@ ABOUT_SECTIONS = {
                     },
                     {
                         "term": "Composition control",
-                        "text": "Product G/H is set mostly by feedforward: the D-feed and E-feed ratios (r2, r3) are computed from the target %G via fixed calibration curves. An optional %G feedback trim is available but is off by default (it needs retuning for this plant variant). Two reactant-composition trims — yA and yAC — make slow velocity-form corrections to the A-feed and C-feed ratios to keep the reactor feed mix on target."
+                        "text": "Product G/H is set mostly by feedforward: the D-feed and E-feed ratios (r2, r3) are computed from the target %G via fixed calibration curves. An optional %G feedback trim is available but is off by default (it needs retuning for this plant variant). Two reactant-composition trims (yA and yAC) make slow velocity-form corrections to the A-feed and C-feed ratios to keep the reactor feed mix on target."
                     }
                 ]
             },
@@ -255,7 +255,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "para",
-                "text": "Three of the twelve manipulated variables are not on feedback loops in this strategy — they are held fixed at their nominal positions:"
+                "text": "Three of the twelve manipulated variables are not on feedback loops in this strategy; they are held fixed at their nominal positions:"
             },
             {
                 "type": "bullets",
@@ -280,7 +280,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "para",
-                "text": "An operating mode is simply a set of controller setpoints — chiefly the G:H product ratio (via the %G target) and the production rate. Selecting a mode changes the targets the loops chase; it does not swap in a different controller."
+                "text": "An operating mode is simply a set of controller setpoints, chiefly the G:H product ratio (via the %G target) and the production rate. Selecting a mode changes the targets the loops chase; it does not swap in a different controller."
             },
             {
                 "type": "bullets",
@@ -309,7 +309,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "para",
-                "text": "This strategy is the default, not a fixed wiring. In the studio you can edit the controller tuning table (gains, reset times, ratios, and limits for every loop), set a custom initial state, and toggle the controller on/off flags — including the composition feedforward, the optional %G feedback, and the two safety overrides — to run your own control configuration."
+                "text": "This strategy is the default, not a fixed wiring. In the studio you can edit the controller tuning table (gains, reset times, ratios, and limits for every loop), set a custom initial state, and toggle the controller on/off flags (including the composition feedforward, the optional %G feedback, and the two safety overrides) to run your own control configuration."
             },
             {
                 "type": "note",
@@ -375,7 +375,7 @@ ABOUT_SECTIONS = {
             },
             {
                 "type": "subheading",
-                "text": "Simulate — Advanced panels"
+                "text": "Simulate: Advanced panels"
             },
             {
                 "type": "bullets",
@@ -436,7 +436,7 @@ ABOUT_SECTIONS = {
                     },
                     {
                         "term": "Experiment record",
-                        "text": "View the full experiment record JSON inline and Download record JSON — a self-contained, reproducible description of the run."
+                        "text": "View the full experiment record JSON inline and Download record JSON, a self-contained, reproducible description of the run."
                     }
                 ]
             },

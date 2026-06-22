@@ -7,7 +7,7 @@ This page gets the simulator running from a fresh checkout.
 The commands below assume your terminal is inside the repository root:
 
 ```bash
-cd "/Users/khalid/Documents/Codex/TEP Studio"
+cd path/to/tep-studio        # the repository root
 ```
 
 You should see files such as `README.md`, `pyproject.toml`, `setup.py`, `src/`, and `temexd_mod/`.
@@ -24,10 +24,10 @@ The package declares `requires-python = ">=3.10"`.
 
 ## 3. Install the package
 
-The native CFFI extension is **built automatically** during installation — there is
+The native CFFI extension is built automatically during installation. There is
 no separate build step.
 
-From PyPI (once published — prebuilt wheels, so no C compiler is needed):
+From PyPI (once published, prebuilt wheels, so no C compiler is needed):
 
 ```bash
 python3 -m pip install tep-studio            # core
@@ -80,7 +80,7 @@ If you installed the package (PyPI or editable), run pytest directly:
 python3 -m pytest -q
 ```
 
-If you are running from a source checkout **without** installing, put `src` on the
+If you are running from a source checkout without installing, put `src` on the
 path instead: `PYTHONPATH=src python3 -m pytest -q`. The suite checks schema
 dimensions, reset and advance behavior, snapshot/restore replay, shutdown mapping,
 dataset generation, optimization rollout, linearization, and the Gymnasium API.
@@ -92,7 +92,7 @@ python3 -m tep_studio.simulation.examples.r12_open_loop
 ```
 
 Expected behavior: the script prints the initial reactor pressure and then terminates
-near `1.07 h` with a high reactor pressure shutdown — the base-case plant is open-loop
+near `1.07 h` with a high reactor pressure shutdown. The base-case plant is open-loop
 unstable. For a stabilized run, see [Closed-Loop Control](control.md).
 
 ## 7. Build this documentation site

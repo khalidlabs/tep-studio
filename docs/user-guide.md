@@ -165,7 +165,7 @@ The controller consumes only published measurements (no plant-state leakage), in
 
 ## Simulation Studio
 
-For interactive use, the `tep_studio.ui` package provides a Dash + Plotly web interface — open/closed-loop runs, disturbance scenarios, step tests, dataset generation, run comparison, and scenario save/load:
+For interactive use, the `tep_studio.ui` package provides a Dash + Plotly web interface for open/closed-loop runs, disturbance scenarios, dataset generation, run comparison, and scenario save/load:
 
 ```bash
 python3 -m pip install -e ".[ui]"

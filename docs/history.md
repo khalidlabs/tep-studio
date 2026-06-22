@@ -1,25 +1,17 @@
 # History and Lineage of the Tennessee Eastman Process
 
-The Tennessee Eastman Process (TEP) is the most widely used benchmark in process
+The Tennessee Eastman Process (TEP) is among the most widely used benchmarks in process
 control and process fault detection. Every implementation in use today descends
 from a single Fortran 77 model published by Downs and Vogel in 1993. This page
 traces that lineage, explains the numerical core all variants share, surveys the
 Python ecosystem, and locates TEP Studio within it.
 
-!!! note "Where TEP Studio sits"
-    TEP Studio implements the **modified (revised) model of Bathelt, Ricker and
-    Jelali (2015)** — the same `temexd_mod.c` kernel used by the modern reference
-    datasets — compiled directly into a native CFFI extension. It is therefore on
-    the *revised-model* branch of the family, not the original 1993 Fortran. For a
-    direct, benchmarked comparison against a contemporary classic-model wrapper,
-    see [Comparison](comparison.md).
-
 ## The original model (Downs & Vogel, 1993)
 
 J. J. Downs and E. F. Vogel of Eastman Chemical released the foundational model in
 *A plant-wide industrial process control problem* (Computers & Chemical
-Engineering 17(3):245–255, 1993). It describes a plant — reactor, condenser,
-vapor–liquid separator, recycle compressor, and product stripper — that produces
+Engineering 17(3):245–255, 1993). It describes a plant (reactor, condenser,
+vapor–liquid separator, recycle compressor, and product stripper) that produces
 liquid products G and H from gaseous reactants A, C, D and E, with inert B and
 byproduct F, through four irreversible exothermic reactions.
 
@@ -110,7 +102,7 @@ parameter and variable, in contrast to the opaque compiled C-mex.
 
 All live implementations integrate the same 50-state ODE system. Given the current
 state `YY` and the active disturbance vector `IDV`, `TEFUNC` computes the derivatives
-`YP` — material balances for the eight components A–H across reactor, separator and
+`YP`: material balances for the eight components A–H across reactor, separator and
 stripper liquid/vapor holdups, energy balances, and compressor, valve and
 analyzer-delay states. The states map roughly to reactor component moles (1–9),
 separator and stripper holdups (10–17), pressures/levels/temperatures (18–30),
@@ -141,8 +133,8 @@ is the origin of the familiar "one point per second, one sample per three minute
 cadence.
 
 At a one-second step, forward Euler sits near its stability limit; larger steps can
-destabilize the integration. That fragility — combined with the original code's
-per-function-call random-number regeneration — is exactly what the 2015 revision
+destabilize the integration. That fragility, combined with the original code's
+per-function-call random-number regeneration, is what the 2015 revision
 addressed.
 
 !!! tip "Why TEP Studio can use a higher-order integrator"
@@ -177,7 +169,7 @@ adds a fourth.
   anywhere with no compiler, at the cost of being a second implementation that can
   drift from the reference.
 - **TEP Studio** compiles the revised `temexd_mod.c` into a single native CFFI
-  extension — one numerical source of truth, no MATLAB dependency — and wraps it in a
+  extension (one numerical source of truth, no MATLAB dependency) and wraps it in a
   schema-driven domain model with online (Gymnasium), offline (dataset), and
   optimization contracts.
 
@@ -190,7 +182,7 @@ simulators but static datasets:
   Simulation Data for Anomaly Detection Evaluation* (Harvard Dataverse,
   doi:10.7910/DVN/6C3JR1). Generated from the Braatz closed-loop Fortran; 500
   simulation runs per condition; fault-free plus faults 1–20; faults introduced 1 h
-  into faulty training runs and 8 h into faulty test runs. The de-facto ML benchmark.
+  into faulty training runs and 8 h into faulty test runs. The most-used ML benchmark.
 - **Reinartz, Kulahci & Ravn (2021)** — *An extended Tennessee Eastman simulation
   dataset* (Computers & Chemical Engineering 149:107281; DTU/figshare
   doi:10.11583/DTU.13385936). Generated from the Bathelt revised simulator: 28 faults

@@ -1,7 +1,7 @@
 """A minimal Anthropic tool-use loop over the shared :class:`TepToolset`.
 
 :func:`respond` runs one assistant turn: it sends the conversation plus the tool
-specs to the Claude Messages API, executes any tool calls against the toolset
+specs to the Anthropic Messages API, executes any tool calls against the toolset
 (reusing the exact tools the MCP server exposes), and loops until the model stops
 requesting tools. It returns the updated (JSON-serializable) message history, the
 assistant's text, and the ids of any runs created this turn — so the studio can

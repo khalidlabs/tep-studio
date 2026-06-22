@@ -75,7 +75,7 @@ Cross-platform wheels and the PyPI upload are automated by `.github/workflows/wh
 (cibuildwheel). The workflow runs on a version tag (`v*`) or manual dispatch: it builds
 wheels for Linux, macOS, and Windows on CPython 3.10–3.13 plus an sdist, smoke-tests that
 each wheel imports and loads the native extension, and publishes to PyPI via Trusted
-Publishing (OIDC — no stored token).
+Publishing (OIDC, no stored token).
 
 Before the first real release:
 
@@ -84,7 +84,7 @@ Before the first real release:
 3. Declare the license in `pyproject.toml` (e.g. `license = "BSD-3-Clause"`), add a
    `LICENSE` file, and fill in `[project.urls]`. Confirm and honor the upstream license
    of the bundled `temexd_mod/temexd_mod.c` (Bathelt, Ricker & Jelali, 2015).
-4. Dry-run to **TestPyPI** first, then `pip install` from TestPyPI in a clean
+4. Dry-run to TestPyPI first, then `pip install` from TestPyPI in a clean
    environment to confirm the wheel works end to end.
 
 To cut a release: bump `version` in `pyproject.toml`, tag `vX.Y.Z`, and push the tag.

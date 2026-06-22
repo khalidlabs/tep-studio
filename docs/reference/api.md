@@ -83,7 +83,7 @@ Checks schema/kernel dimensions for states, manipulated variables, disturbances,
 
 Returned by `TennesseeEastmanProcess.advance()`.
 
-Important fields:
+Fields:
 
 | Field | Meaning |
 | --- | --- |

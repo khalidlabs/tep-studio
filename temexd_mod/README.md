@@ -3,11 +3,11 @@
 Numerical source-of-truth files for the modified Tennessee Eastman Process,
 trimmed to what the Python package actually consumes:
 
-- `temexd_mod.c`, `teprob_mod.h` — the modified TEP C kernel (Bathelt, Ricker &
+- `temexd_mod.c`, `teprob_mod.h`: the modified TEP C kernel (Bathelt, Ricker &
   Jelali, 2015). Compiled into the native extension by
   `src/tep_studio/simulation/_cffi_build.py`, and used as the base-case state
   reference by the validation suite (`validation/base_case.py`).
-- `Mode1xInitial.mat`, `Mode3xInitial.mat`, `Mode1SkogeInit.mat` — Simulink
+- `Mode1xInitial.mat`, `Mode3xInitial.mat`, `Mode1SkogeInit.mat`: Simulink
   `CSTATE` operating-point vectors loaded by the MAT-state validation suite
   (`validation/mat_states.py`).
 

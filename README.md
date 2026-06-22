@@ -9,7 +9,7 @@ The Python package keeps the original `temexd_mod.c` equations as the numerical 
 - causal trajectory datasets through `TrajectoryDataset`
 - deterministic rollout and finite-difference optimization through `OptimizationAdapter`
 - closed-loop decentralized control through `ClosedLoopSimulation` and `RickerMultiLoopController`
-- an interactive Dash + Plotly interface for runs, step tests, and dataset generation (`tep_studio.ui`)
+- an interactive Dash + Plotly interface for runs, disturbances, and dataset generation (`tep_studio.ui`)
 
 ## Quickstart
 
@@ -33,9 +33,11 @@ Or from the terminal: `tep run --horizon 24 --idv idv_01@1.0`, `tep list disturb
 
 ## Build
 
-Once published to PyPI, `pip install tep-studio` pulls a prebuilt wheel for
-Linux, macOS, and Windows — no C compiler required. The instructions below are for
-building from a source checkout, which compiles the native extension locally.
+`pip install tep-studio` downloads the source distribution and compiles the native
+extension on your machine, so it needs a C compiler and the standard Python build
+tools (`gcc` or `clang` on Linux and macOS; the Visual Studio Build Tools on
+Windows). The instructions below cover building from a source checkout, which runs
+the same compile step.
 
 The build requires `setuptools>=68` (declared in `pyproject.toml`). The recommended
 path is an editable install, which uses build isolation to provision the correct
@@ -107,7 +109,7 @@ The controller is separate from the simulator core and consumes only published m
 
 ## Interface (Simulation Studio)
 
-An interactive Dash + Plotly web interface for running, visualizing, and exporting simulations — open/closed-loop runs, disturbance scenarios, step tests, dataset generation, run comparison, and scenario save/load:
+An interactive Dash + Plotly web interface for running, visualizing, and exporting simulations. It covers open/closed-loop runs, disturbance scenarios, dataset generation, run comparison, and scenario save/load:
 
 ```bash
 python3 -m pip install -e ".[ui]"

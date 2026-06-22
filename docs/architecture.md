@@ -13,7 +13,7 @@ The implementation uses a narrow numerical core and task-specific adapters. The 
 | Trajectory adapter | `dataset.py` | Convert `AdvanceResult` objects into pandas, NumPy, CSV, and Parquet data products. |
 | Optimization adapter | `optimization.py` | Support finite-horizon rollout and finite-difference gradients. |
 | Control layer | `control/` | Decentralized multiloop PI controller (Ricker 1996) that closes the loop on published measurements only. |
-| Interface | `ui/` | Dash + Plotly "Simulation Studio" over a Dash-free, importable backend (`ui/service.py`) for runs, step tests, disturbances, and dataset generation. |
+| Interface | `ui/` | Dash + Plotly "Simulation Studio" over a Dash-free, importable backend (`ui/service.py`) for runs, disturbances, and dataset generation. |
 | Validation framework | `validation/` (writes the gitignored, generated `validation_outputs/`) | Run validation suites and write metrics, figures, reports, trajectories, and manifests. |
 
 ## Dependency Direction
@@ -30,7 +30,7 @@ schema.py --------------------|       -> optimization.py
 
 ## Control Layer
 
-The `control/` package is a consumer of the core, not part of it — the same separation the design principles call for. It drives the documented `advance(action, action_level="direct_mv")` interface and reads only `AdvanceResult.measurements`, never `state` (no plant-state leakage).
+The `control/` package is a consumer of the core, not part of it, following the same separation the design principles call for. It drives the documented `advance(action, action_level="direct_mv")` interface and reads only `AdvanceResult.measurements`, never `state` (no plant-state leakage).
 
 | Module | Responsibility |
 | --- | --- |
@@ -45,7 +45,7 @@ See [Closed-Loop Control](control.md) for usage.
 
 ## Interface Layer
 
-The `ui/` package is the "Simulation Studio" — a Dash + Plotly web app over a deliberately **Dash-free, importable backend**, so the same runs and exports are scriptable without a browser.
+The `ui/` package is the "Simulation Studio", a Dash + Plotly web app over a deliberately Dash-free, importable backend, so the same runs and exports are scriptable without a browser.
 
 | Module | Responsibility |
 | --- | --- |

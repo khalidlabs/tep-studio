@@ -70,7 +70,7 @@ Terminal equivalent: `tep run --horizon 12 --idv idv_01@1.0`. See
 
 ## Run a step test
 
-Open-loop MV step (response only — no model identification):
+Open-loop MV step (response only, no model identification):
 
 ```python
 from tep_studio.analysis import ScenarioConfig, StepTestSpec, run_mv_step_test
@@ -135,7 +135,7 @@ For small intervals the continuous Jacobian is `A_continuous ≈ (A - I) / contr
 ## Bring your own controller
 
 `ClosedLoopSimulation` accepts anything satisfying the `Controller` protocol
-(`setpoints`, `reset`, `compute_action`) — no subclassing. The PI primitives
+(`setpoints`, `reset`, `compute_action`); no subclassing. The PI primitives
 (`DiscretePI`, `VelocityPI`) are reusable building blocks. A worked example that
 swaps in a custom reactor-temperature loop is in `control/examples/custom_controller.py`.
 
@@ -152,14 +152,14 @@ open(filename, "wb").write(payload)
 ```
 
 A multi-seed batch from the terminal: `tep dataset --seeds 1,2,3 --horizon 12 --out data.csv`.
-Batch jobs are independent, so `tep dataset` runs them across **all CPU cores by default**
+Batch jobs are independent, so `tep dataset` runs them across all CPU cores by default
 (pass `-j N` to cap workers, or `-j 1` for sequential). In Python the same applies:
 `run_batch(spec, max_workers=N)` (`None` = all cores). For lower-level, per-step control
 see [Working with Data](data.md) and `TrajectoryDataset`.
 
 ## Speed vs. fidelity (the integrator)
 
-Simulations use a fast fixed-step **RK4** integrator by default — ~8× faster than the
+Simulations use a fast fixed-step RK4 integrator by default: ~8× faster than the
 adaptive SciPy solver, and faithful to the model's 0.0005 h design step (it matches RK45
 to ~0.001%). For an adaptive reference solve, request RK45:
 
@@ -173,7 +173,7 @@ ScenarioConfig(solver_method="RK45")                   # for run_scenario / run_
 
 From the terminal: `tep run --solver RK45` / `tep dataset --solver RK45`. Note: `rtol`/`atol`
 affect only the SciPy methods; the fixed-step `RK4`/`Euler` ignore them. Keep the default
-`fixed_step=0.0005` — the model is stiff, so coarser substeps are rejected (loud error).
+`fixed_step=0.0005`: the model is stiff, so coarser substeps are rejected (loud error).
 
 ## Use the command line
 
