@@ -17,10 +17,10 @@ The main layers are:
 | Dataset adapter | `dataset.py` | Converts simulator results into named pandas, NumPy, CSV, or Parquet data. |
 | Optimization adapter | `optimization.py` | Provides deterministic rollout and finite-difference gradients. |
 | Control | `control/` | Decentralized multiloop PI controller (Ricker 1996) that closes the loop on measurements only. |
-| Interface | `ui/` | Dash + Plotly "Simulation Studio" over a Dash-free backend for runs, step tests, and dataset generation. |
+| Interface | `ui/` | Dash + Plotly "Simulation Studio" over a Dash-free backend for runs and dataset generation. |
 | Validation | `validation/` | Generates trajectories, metrics, figures, reports, and manifests. |
 
-Separately, the `research/schema/` directory holds the machine-readable process-description JSON Schema (`research/schema/process_description.schema.json`) and a minimal non-TEP example (`research/schema/examples/cstr_minimal.json`) — the design-principles deliverable, distinct from the in-code `TEP_SCHEMA` documented in [Schema Reference](reference/schema.md).
+Separately, the `research/schema/` directory holds the machine-readable process-description JSON Schema (`research/schema/process_description.schema.json`) and a minimal non-TEP example (`research/schema/examples/cstr_minimal.json`). This is the design-principles deliverable, distinct from the in-code `TEP_SCHEMA` documented in [Schema Reference](reference/schema.md).
 
 ## State
 
@@ -102,10 +102,10 @@ Rows generated from `AdvanceResult` are end-of-interval rows:
 This convention matters when building supervised-learning or offline-RL transitions.
 
 Within each interval the kernel ODEs are integrated by the configured `solver_method`. The
-default is a fast fixed-step **RK4** (`fixed_step=0.0005` h, the stiff model's design step) —
+default is a fast fixed-step RK4 (`fixed_step=0.0005` h, the stiff model's design step),
 roughly 8× faster than the adaptive SciPy solvers and matching them to ~0.001%. Pass
-`solver_method="RK45"` (or `"RK23"`, etc.) for an adaptive solve where `rtol`/`atol` apply;
-those tolerances are ignored by the fixed-step `"RK4"`/`"Euler"` methods, and a `fixed_step`
+`solver_method="RK45"` (or `"RK23"`, etc.) for an adaptive solve where `rtol`/`atol` apply.
+Those tolerances are ignored by the fixed-step `"RK4"`/`"Euler"` methods, and a `fixed_step`
 far above the stiffness floor is rejected with a clear error.
 
 ## Shutdowns and events

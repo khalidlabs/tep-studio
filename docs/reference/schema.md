@@ -6,7 +6,7 @@
 from tep_studio import TEP_SCHEMA
 ```
 
-This page documents the **in-code** schema (the runtime name↔index map). It is distinct from the standalone JSON Schema deliverable under `research/schema/` (`research/schema/process_description.schema.json` + `research/schema/examples/cstr_minimal.json`), which is the machine-readable process-description format described by the design principles.
+This page documents the in-code schema (the runtime name↔index map). It is distinct from the standalone JSON Schema deliverable under `research/schema/` (`research/schema/process_description.schema.json` + `research/schema/examples/cstr_minimal.json`), which is the machine-readable process-description format described by the design principles.
 
 ## Schema counts
 

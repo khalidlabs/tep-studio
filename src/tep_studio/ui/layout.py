@@ -482,14 +482,14 @@ def _mcp_page() -> html.Div:
     """A user guide for the bundled ``tep-mcp`` MCP server (routed at /mcp)."""
     blocks = [
         {"type": "para", "text": "TEP Studio ships an MCP server, tep-mcp, that exposes this simulator as a small set of tools. "
-         "Connect it to any MCP-compatible client (e.g. Claude Desktop) and you can configure, run, inspect, and compare TEP "
-         "scenarios in plain language — the assistant calls the tools for you. These are the same tools behind the in-app Assistant tab."},
+         "Connect it to any MCP-compatible client and you can configure, run, inspect, and compare TEP scenarios in plain "
+         "language; the assistant calls the tools for you. These are the same tools behind the in-app Assistant tab."},
         {"type": "subheading", "text": "1 · Install"},
         {"type": "reactions", "lines": ["pip install 'tep-studio[agent]'"]},
         {"type": "para", "text": "This pulls in the MCP SDK and installs the tep-mcp console script. The server speaks MCP over stdio, "
          "so it is meant to be launched by your client — you don't run it in a terminal yourself."},
-        {"type": "subheading", "text": "2 · Connect a client (Claude Desktop)"},
-        {"type": "para", "text": "Add the server to the client's MCP config and restart the client. For Claude Desktop, edit claude_desktop_config.json:"},
+        {"type": "subheading", "text": "2 · Connect a client"},
+        {"type": "para", "text": "Add the server to your MCP client's configuration and restart the client. Most clients use the standard mcpServers block:"},
         {"type": "reactions", "lines": [
             "{",
             '  "mcpServers": {',
@@ -497,10 +497,7 @@ def _mcp_page() -> html.Div:
             "  }",
             "}",
         ]},
-        {"type": "bullets", "items": [
-            {"term": "macOS", "text": "~/Library/Application Support/Claude/claude_desktop_config.json"},
-            {"term": "Windows", "text": "%APPDATA%\\Claude\\claude_desktop_config.json"},
-        ]},
+        {"type": "para", "text": "Where that configuration lives depends on the client; check its documentation for the mcpServers settings."},
         {"type": "note", "text": "If tep-mcp isn't on the client's PATH, use its full path (the output of `which tep-mcp`), or set "
          '"command": "python" with "args": ["-m", "tep_studio.agent.mcp_server"].'},
         {"type": "subheading", "text": "3 · The tools it exposes"},

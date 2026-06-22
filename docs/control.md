@@ -1,13 +1,13 @@
 # Closed-Loop Control
 
-The base-case TEP is **open-loop unstable**: held at constant inputs it trips on high
+The base-case TEP is open-loop unstable: held at constant inputs it trips on high
 reactor pressure within a few hours. The `tep_studio.control` package adds a
 decentralized multiloop PI controller (N. L. Ricker, *Decentralized control of the
 Tennessee Eastman Challenge Process*, J. Proc. Cont. 6(4), 1996) that keeps the plant
 on its operating point.
 
 The controller is separate from the simulator core (principle P2) and consumes only
-published measurements — never the internal 50-state vector (principle P5).
+published measurements, never the internal 50-state vector (principle P5).
 
 ## 1. Stabilize the plant
 
@@ -22,7 +22,7 @@ print(result.peak["reactor_pressure_max"])     # ~2709 kPa  (trip is 3000)
 ```
 
 `stabilized` is `True` when the run reaches the horizon without a shutdown. The
-runner separates **termination** (an endogenous plant shutdown) from **truncation**
+runner separates termination (an endogenous plant shutdown) from truncation
 (reaching the horizon), matching the simulator's lifecycle semantics (principle P3).
 
 !!! note "Control interval"
@@ -49,7 +49,7 @@ array index.
 | %G / reactant trims | `%G`, `yA`, `yAC` | feed-ratio trims `r1`..`r4` |
 
 The reactor-level loop sets the separator-temperature setpoint, which drives the
-condenser coolant — the cascade that regulates reactor inventory.
+condenser coolant. This cascade regulates reactor inventory.
 
 ## 3. Setpoints and configuration
 
@@ -75,8 +75,8 @@ Feature flags:
 
 - `enable_composition` (default `True`) — the stable yA/yAC reactant-ratio trims and
   the %G feedforward.
-- `enable_pct_g_feedback` (default `False`) — the %G→`Eadj` feedback loop. **Off by
-  default:** its feedforward constants were tuned for the *original* TEP (`temex.c`),
+- `enable_pct_g_feedback` (default `False`) — the %G→`Eadj` feedback loop. Off by
+  default: its feedforward constants were tuned for the *original* TEP (`temex.c`),
   while this package wraps the *modified* TEP (`temexd_mod.c`), whose composition
   dynamics differ. Enabling it without retuning destabilizes the plant.
 - `enable_overrides` (default `False`) — the high-reactor-pressure override (cuts the
@@ -113,7 +113,7 @@ result = ClosedLoopSimulation(horizon=24.0).run(disturbances=idv(1))   # A/C rat
 ```
 
 IDV(1), IDV(8) and IDV(13) are rejected indefinitely. IDV(6) (total A-feed loss) is
-among the hardest TEP disturbances: the controller sustains the plant well past the
+among the hardest TEP disturbances. The controller sustains the plant well past the
 open-loop shutdown time but cannot hold it indefinitely.
 
 A time-varying schedule is also supported:

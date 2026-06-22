@@ -41,7 +41,7 @@ an architecture-mismatch error.
 
 If the import error says the extension *is present but failed to load on this
 platform* (and reports your OS and CPU), the compiled file was built for a different
-operating system or CPU architecture — for example, a macOS arm64 build checked out
+operating system or CPU architecture, for example a macOS arm64 build checked out
 on Linux. Reinstall the matching prebuilt wheel:
 
 ```bash

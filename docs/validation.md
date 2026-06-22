@@ -6,7 +6,7 @@ The validation layer writes trajectories, metric CSVs, figures, reports, and a m
 src/tep_studio/simulation/validation_outputs/
 ```
 
-This directory is **generated output** — it is gitignored and not committed. The paths below describe what the validation CLI writes when you run it; run the commands in this guide to (re)generate them. Use validation before relying on simulator outputs in a paper, report, benchmark, or controller comparison.
+This directory is generated output: it is gitignored and not committed. The paths below describe what the validation CLI writes when you run it; run the commands in this guide to (re)generate them. Use validation before relying on simulator outputs in a paper, report, benchmark, or controller comparison.
 
 ## 1. Run local validation
 

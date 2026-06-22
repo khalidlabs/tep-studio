@@ -1,8 +1,8 @@
 # Interface (Simulation Studio)
 
 A Dash + Plotly web interface for running, visualizing, and exporting TEP
-simulations interactively — open/closed-loop runs, disturbance scenarios, step
-tests, dataset generation, run comparison, and scenario save/load.
+simulations interactively: open/closed-loop runs, disturbance scenarios, dataset
+generation, run comparison, and scenario save/load.
 
 ## Install and launch
 
@@ -25,10 +25,10 @@ Configure and run a scenario, then read the trajectory interactively.
   feedback; edit the nine setpoints directly.
 - **Open loop**: 12 valve sliders (default = the Mode-1 base case `u0`).
 - **Disturbances**: pick any of the 28 IDVs (shown with descriptions) and an
-  activation time — they step on at that time. A **magnitude** input (0–1) appears
+  activation time; they step on at that time. A magnitude input (0–1) appears
   for each selected IDV (default 1.0), so you can apply partial disturbances.
-- **Advanced solver** (collapsible): choose the integrator — `RK4` or `Euler`
-  (fixed-step) or `RK45` / `RK23` (adaptive SciPy) — and set `rtol` / `atol`
+- **Advanced solver** (collapsible): choose the integrator (`RK4` or `Euler`
+  fixed-step, or `RK45` / `RK23` adaptive SciPy) and set `rtol` / `atol`
   (adaptive only), the `fixed_step` substep, and `record_every` (0 = auto
   downsampling). The defaults reproduce the standard run, so you only open this when
   you need to.
@@ -39,20 +39,14 @@ Configure and run a scenario, then read the trajectory interactively.
   one to reproduce a run exactly. (Loading restores the solver/record settings and
   the disturbance selection; per-disturbance magnitudes currently reset to 1.0.)
 - If a run can't start (for example, an invalid configuration), a red banner
-  explains why instead of failing silently — the same applies to step tests and
-  batch runs.
-
-### Step Test
-Apply a step to a manipulated variable (open loop) or a controller setpoint (closed
-loop) at a chosen time and view the drive signal and the measured response. (This
-visualizes the response; it does not fit a process model.)
+  explains why instead of failing silently. The same applies to batch runs.
 
 ### Dataset
-Select stored runs and export them as **CSV**, **Parquet**, or **JSON** (one tidy
-table with `run_id`/`scenario_id` columns). The **Batch** panel sweeps seeds and,
-optionally, one parameter — either a setpoint (e.g. `setpoints.production_rate`) or a
-top-level numeric field (`horizon`, `control_interval`, `fixed_step`) over several
-values — producing many runs plus a per-run metrics table; download the combined
+Select stored runs and export them as CSV, Parquet, or JSON (one tidy
+table with `run_id`/`scenario_id` columns). The Batch panel sweeps seeds and,
+optionally, one parameter (either a setpoint, e.g. `setpoints.production_rate`, or a
+top-level numeric field such as `horizon`, `control_interval`, `fixed_step`) over several
+values, producing many runs plus a per-run metrics table; download the combined
 dataset and the metrics.
 
 ### Compare
@@ -64,19 +58,19 @@ copies all run IDs, and a capacity indicator shows how many runs are cached
 are then evicted, LRU).
 
 ### Metrics / Record
-For the selected run, a metric-card grid summarizes the outcome — terminated / final
-time, **time-to-shutdown**, peak reactor pressure and its **margin** to the 3000 kPa
-trip, level **margins**, constraint violations, operating cost, and mean production —
-above a per-controlled-variable table of **IAE and ISE**. A clipboard button copies
-the run ID. Below it, the reproducible **experiment record** (P6: source revision,
+For the selected run, a metric-card grid summarizes the outcome: terminated / final
+time, time-to-shutdown, peak reactor pressure and its margin to the 3000 kPa
+trip, level margins, constraint violations, operating cost, and mean production. These sit
+above a per-controlled-variable table of IAE and ISE. A clipboard button copies
+the run ID. Below it, the reproducible experiment record (P6: source revision,
 process/config hashes, seed, solver settings, setpoints, model-leakage policy) is
 shown and downloadable as JSON.
 
 ## Look and layout
 
-A single light theme is defined in `tep_studio/ui/theme.py` — color, typography, and
+A single light theme is defined in `tep_studio/ui/theme.py`: color, typography, and
 spacing tokens, shared component styles, and a registered `"tep"` Plotly template so
-the chrome and the plots share one palette — with the global CSS in the app's index
+the chrome and the plots share one palette, with the global CSS in the app's index
 template. The layout is responsive: the configuration sidebar stacks above the
 results on narrow screens (below ~880 px), and every plot exports a high-resolution
 PNG from its toolbar.

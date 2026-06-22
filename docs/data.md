@@ -56,7 +56,7 @@ The current one-step result has columns for:
 dataset.to_csv("mode1_short.csv")
 ```
 
-CSV is the most portable format and is easy to inspect in spreadsheet tools.
+CSV is portable and easy to inspect in spreadsheet tools.
 
 ## 4. Save to Parquet
 
