@@ -123,6 +123,9 @@ class RickerMultiLoopController:
         self._r1 = registry.nominal.ratios["r1"]
         self._r4 = registry.nominal.ratios["r4"]
         self._fp = registry.nominal.fp_base
+        # A-feed valve saturation flags (previous step), for yA-loop anti-windup.
+        self._a_feed_hi_sat = False
+        self._a_feed_lo_sat = False
         self._time = 0.0
         self._initialized = False
 
@@ -144,6 +147,8 @@ class RickerMultiLoopController:
         self._r1 = nominal.ratios["r1"]
         self._r4 = nominal.ratios["r4"]
         self._fp = nominal.fp_base
+        self._a_feed_hi_sat = False
+        self._a_feed_lo_sat = False
         # Ramped (rate-limited) production and %G setpoints, seeded bumplessly from the
         # current measurements. The decentralized strategy moves these slow, feed-driven
         # targets gradually (not in steps); ramping them avoids the large transients that
@@ -208,6 +213,14 @@ class RickerMultiLoopController:
             yac = float(meas[self._a_idx]) + float(meas[self._c_idx])
             d_ya = self._update_velocity(reg.ya, sp.ya, ya)
             d_yac = self._update_velocity(reg.yac, sp.yac, yac)
+            # Conditional-integration anti-windup on the yA loop. The yA trim drives r1
+            # (the stream-1 A-feed ratio); when the A-feed valve is saturated — e.g. loss
+            # of A feed (IDV6) — raising r1 cannot restore yA, so integrating further only
+            # winds up and, via Eq.10 (r4 += d_yac - d_ya), drags r4 down and starves the
+            # plant to a low-inventory trip. Freeze the increment when it would push
+            # further into saturation; the yAC loop keeps acting to add A+C via stream 4.
+            if (self._a_feed_hi_sat and d_ya > 0.0) or (self._a_feed_lo_sat and d_ya < 0.0):
+                d_ya = 0.0
             self._r1 += d_ya
             self._r4 += d_yac - d_ya
             outputs["Eadj"] = eadj
@@ -236,6 +249,9 @@ class RickerMultiLoopController:
             value = self._update_ratio(loop, setpoint, meas)
             action[self._vi[loop.mv]] = value
             outputs[loop.mv] = value
+            if loop.ratio_key == "r1":  # A-feed valve saturation -> yA anti-windup next step
+                self._a_feed_hi_sat = value >= loop.hi - 1e-6
+                self._a_feed_lo_sat = value <= loop.lo + 1e-6
 
         action[self._vi[reg.reactor_temperature.drives]] = xmv_reactor_cool
         action[self._vi[reg.separator_temperature.drives]] = xmv_condenser
