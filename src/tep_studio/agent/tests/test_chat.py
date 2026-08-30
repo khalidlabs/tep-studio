@@ -43,7 +43,7 @@ class _FakeClient:
 def test_tool_specs_shape():
     specs = TepToolset().tool_specs()
     names = {s["name"] for s in specs}
-    assert names == {"describe_plant", "run_scenario", "get_run", "get_run_series", "list_runs", "compare_runs"}
+    assert names == {"describe_plant", "run_scenario", "run_sweep", "get_run", "get_run_series", "list_runs", "compare_runs"}
     for s in specs:
         assert s["description"] and s["input_schema"]["type"] == "object"
     run = next(s for s in specs if s["name"] == "run_scenario")
@@ -56,6 +56,7 @@ def test_dispatch_routes_to_tools():
     out = ts.dispatch("run_scenario", {"config": _tiny_closed()})
     assert out["ok"] is True
     assert ts.dispatch("get_run", {"run_id": out["run_id"]})["ok"] is True
+    assert ts.dispatch("run_sweep", {"configs": [_tiny_closed()], "seeds": [1.0]})["ok"] is True
     assert ts.dispatch("nope", {})["ok"] is False
 
 

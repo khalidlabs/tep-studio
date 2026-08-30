@@ -43,6 +43,7 @@ def test_resolved_record_every() -> None:
         {"mode": "mode7"},
         {"horizon": 0.0},
         {"disturbances": [{"idv": "idv_99"}]},
+        {"disturbances": [{"idv": "idv_01", "magnitude": 0.25}]},
         {"disturbances": [{"idv": "idv_01", "magnitude": 5.0}]},
         {"setpoints": {"not_a_field": 1.0}},
         {"manual_mvs": {"not_a_valve": 50.0}},
@@ -55,6 +56,10 @@ def test_from_dict_rejects_invalid(patch: dict) -> None:
     base.update(patch)
     with pytest.raises(ValueError):
         ScenarioConfig.from_dict(base)
+
+
+def test_from_dict_uses_documented_safety_override_default() -> None:
+    assert ScenarioConfig.from_dict({}).enable_overrides is True
 
 
 def test_batch_expand_counts_and_roundtrip() -> None:

@@ -25,8 +25,9 @@ Configure and run a scenario, then read the trajectory interactively.
   feedback; edit the nine setpoints directly.
 - **Open loop**: 12 valve sliders (default = the Mode-1 base case `u0`).
 - **Disturbances**: pick any of the 28 IDVs (shown with descriptions) and an
-  activation time; they step on at that time. A magnitude input (0–1) appears
-  for each selected IDV (default 1.0), so you can apply partial disturbances.
+  activation time; they step on at that time and remain active. The per-IDV input
+  is binary: 0 is off and 1 is on. Intermediate values are rejected because the
+  native TEP interface does not represent partial disturbance severity.
 - **Advanced solver** (collapsible): choose the integrator (`RK4` or `Euler`
   fixed-step, or `RK45` / `RK23` adaptive SciPy) and set `rtol` / `atol`
   (adaptive only), the `fixed_step` substep, and `record_every` (0 = auto
@@ -37,7 +38,7 @@ Configure and run a scenario, then read the trajectory interactively.
   marker is drawn at any shutdown. A manipulated-variable panel is shown below.
 - **Save / Load scenario**: download the current configuration as JSON, or upload
   one to reproduce a run exactly. (Loading restores the solver/record settings and
-  the disturbance selection; per-disturbance magnitudes currently reset to 1.0.)
+  the disturbance selection; per-disturbance activations currently reset to 1.)
 - If a run can't start (for example, an invalid configuration), a red banner
   explains why instead of failing silently. The same applies to batch runs.
 

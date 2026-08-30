@@ -217,19 +217,19 @@ def register_callbacks(app, store) -> None:
     def _toggle(loop):
         return (_HIDE, _SHOW) if loop == "open" else (_SHOW, _HIDE)
 
-    # -- render a magnitude input per selected disturbance ----------------
+    # -- render a binary activation input per selected disturbance --------
     @app.callback(Output("dist-mag-container", "children"), Input("dist-select", "value"))
     def _render_idv_mags(selected):
         selected = selected or []
         if not selected:
             return []
-        rows = [html.Div("Disturbance magnitude (0–1)", style={"fontSize": theme.FS_SM, "fontWeight": "600", "marginBottom": theme.SP_1})]
+        rows = [html.Div("Binary disturbance activation (0=off, 1=on)", style={"fontSize": theme.FS_SM, "fontWeight": "600", "marginBottom": theme.SP_1})]
         for name_ in selected:
             rows.append(
                 html.Div(
                     [
                         html.Label(name_, style={"fontSize": theme.FS_SM, "width": "90px", "display": "inline-block"}),
-                        dcc.Input(type="number", min=0, max=1, step=0.05, value=1.0, id={"type": "idv-mag", "name": name_}, className="tep-input", style={"width": "90px"}),
+                        dcc.Input(type="number", min=0, max=1, step=1, value=1.0, id={"type": "idv-mag", "name": name_}, className="tep-input", style={"width": "90px"}),
                     ],
                     style={"marginBottom": theme.SP_1},
                 )
@@ -679,7 +679,7 @@ def register_callbacks(app, store) -> None:
         for row in tuning_data:
             if cfg.controller_tuning and row["parameter"] in cfg.controller_tuning:
                 row["value"] = cfg.controller_tuning[row["parameter"]]
-        # Note: per-disturbance magnitudes reset to 1.0 on load (the idv-mag inputs
+        # Note: per-disturbance activations reset to 1.0 on load (the idv-mag inputs
         # are created only after dist-select updates); full round-trip is a follow-up.
         return (
             cfg.loop_type, cfg.horizon, ci, cfg.seed, flags, dist_names, dist_start,

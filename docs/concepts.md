@@ -72,6 +72,9 @@ If no base vector is provided, unspecified entries are zero. Use `update_vector(
 
 The disturbance vector has 28 entries named `idv_01` through `idv_28`. You can pass a disturbance vector to `reset()` or `advance()`:
 
+Each TEP disturbance entry is a binary activation. Use `0` for off and `1` for
+on. Intermediate values do not represent partial disturbance severity.
+
 ```python
 disturbances = np.zeros(28)
 disturbances[0] = 1.0

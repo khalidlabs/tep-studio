@@ -82,6 +82,19 @@ class Variable:
 
 
 @dataclass(frozen=True)
+class Constraint:
+    """A published process constraint expressed on an online measurement."""
+
+    name: str
+    variable: str
+    kind: str
+    limit: float
+    unit: str
+    terminal: bool
+    description: str
+
+
+@dataclass(frozen=True)
 class ProcessSchema:
     name: str
     states: tuple[Variable, ...]
@@ -92,6 +105,7 @@ class ProcessSchema:
     disturbance_monitors: tuple[Variable, ...]
     process_monitors: tuple[Variable, ...]
     concentration_monitors: tuple[Variable, ...]
+    constraints: tuple[Constraint, ...]
     time_unit: str = "h"
     internal_unit_policy: str = "legacy_temexd_mod"
     external_unit_policy: str = "schema documents SI-facing names; kernel values remain legacy TEP values"
@@ -103,6 +117,10 @@ class ProcessSchema:
     native_rng_semantics: str = (
         "native stochastic seed initializes the kernel random stream used by measurement noise and enabled stochastic "
         "disturbances; default ms_flag=0x0F uses the shared stream, while kernel bit 5 can separate the two RNG states"
+    )
+    disturbance_input_semantics: str = (
+        "TEP IDVs are binary latched activations: 0 is off and 1 is on; the native bridge thresholds raw values at 0.5, "
+        "so the public scenario interface rejects intermediate values rather than presenting them as partial severity"
     )
 
     def names(self, role: str) -> list[str]:
@@ -184,6 +202,12 @@ class ProcessSchema:
             ]
             checks[f"{role}.identifiers_unique"] = len(identifiers) == len(set(identifiers))
 
+        measurement_names = set(self.names("measurements"))
+        checks["constraints.names_unique"] = len({c.name for c in self.constraints}) == len(self.constraints)
+        checks["constraints.measurements"] = all(c.variable in measurement_names for c in self.constraints)
+        checks["constraints.kinds"] = all(c.kind in {"lower", "upper"} for c in self.constraints)
+        checks["constraints.units"] = all(c.unit == self.variable("measurements", c.variable).unit for c in self.constraints)
+
         if self.name == "modified_tennessee_eastman_process":
             for role, expected_count in TEP_ROLE_COUNTS.items():
                 checks[f"{role}.count"] = len(self._variables_for_role(role)) == expected_count
@@ -233,6 +257,12 @@ class ProcessSchema:
             checks["disturbances.root_causes"] = {
                 v.legacy_index for v in self.disturbances if v.root_cause_status == "unknown"
             } == {16, 17, 18, 20}
+            checks["disturbances.binary_input"] = (
+                "binary latched activations" in self.disturbance_input_semantics
+                and "rejects intermediate values" in self.disturbance_input_semantics
+            )
+            checks["constraints.count"] = len(self.constraints) == 8
+            checks["constraints.terminal"] = all(c.terminal for c in self.constraints)
             checks["monitors.offline"] = all(
                 not v.available_online
                 for role in ("disturbance_monitors", "process_monitors", "concentration_monitors")
@@ -285,8 +315,26 @@ class ProcessSchema:
                 "actuator": self.actuator_semantics,
             },
             "native_rng_semantics": self.native_rng_semantics,
+            "disturbance_input_semantics": self.disturbance_input_semantics,
+            "constraints": [asdict(constraint) for constraint in self.constraints],
             "variables": rows,
         }
+
+    def constraint_margins(self, measurements: ArrayLike) -> dict[str, float]:
+        """Return positive-inside margins for the published measurement constraints."""
+        values = np.asarray(measurements, dtype=np.float64)
+        if values.shape != (len(self.measurements),):
+            raise ValueError(f"Expected shape ({len(self.measurements)},) for measurements, got {values.shape}.")
+        margins: dict[str, float] = {}
+        for constraint in self.constraints:
+            value = float(values[self.index("measurements", constraint.variable)])
+            if constraint.kind == "upper":
+                margins[constraint.name] = constraint.limit - value
+            elif constraint.kind == "lower":
+                margins[constraint.name] = value - constraint.limit
+            else:
+                raise ValueError(f"Unknown constraint kind {constraint.kind!r}.")
+        return margins
 
     def _variables_for_role(self, role: str) -> tuple[Variable, ...]:
         canonical = self._canonical_role(role)
@@ -691,6 +739,18 @@ states += tuple(
     for i, (name, description) in enumerate(XMV_DESCRIPTIONS)
 )
 
+TEP_CONSTRAINTS = (
+    Constraint("reactor_pressure_high", "reactor_pressure", "upper", 3000.0, "kPa gauge", True, "High reactor-pressure shutdown limit"),
+    Constraint("reactor_level_high", "reactor_level", "upper", 100.0, "%", True, "High reactor-level shutdown limit"),
+    Constraint("reactor_level_low", "reactor_level", "lower", 0.0, "%", True, "Low reactor-level shutdown limit"),
+    Constraint("reactor_temperature_high", "reactor_temperature", "upper", 175.0, "degC", True, "High reactor-temperature shutdown limit"),
+    Constraint("separator_level_high", "separator_level", "upper", 100.0, "%", True, "High separator-level shutdown limit"),
+    Constraint("separator_level_low", "separator_level", "lower", 0.0, "%", True, "Low separator-level shutdown limit"),
+    Constraint("stripper_level_high", "stripper_level", "upper", 100.0, "%", True, "High stripper-level shutdown limit"),
+    Constraint("stripper_level_low", "stripper_level", "lower", 0.0, "%", True, "Low stripper-level shutdown limit"),
+)
+
+
 TEP_SCHEMA = ProcessSchema(
     name="modified_tennessee_eastman_process",
     states=states,
@@ -745,4 +805,5 @@ TEP_SCHEMA = ProcessSchema(
     disturbance_monitors=_disturbance_monitors(),
     process_monitors=_process_monitors(),
     concentration_monitors=_concentration_monitors(),
+    constraints=TEP_CONSTRAINTS,
 )

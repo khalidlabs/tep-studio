@@ -2,7 +2,7 @@
 
 Exposes the simulator as a Model Context Protocol (MCP) server so an LLM can
 configure, run, and inspect simulations through tool calls grounded in the
-process schema. The tool *implementations* (`describe_plant`, `run_scenario`,
+process schema. The tool *implementations* (`describe_plant`, `run_scenario`, `run_sweep`,
 `get_run`, `get_run_series`, `list_runs`, `compare_runs`) are plain functions
 over the Dash-free :mod:`tep_studio.ui` backend and import only core
 dependencies; only :func:`build_server` / :func:`main` import the ``mcp`` SDK,
@@ -24,6 +24,7 @@ from tep_studio.agent.mcp_server import (
     list_runs,
     main,
     run_scenario,
+    run_sweep,
 )
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "main",
     "describe_plant",
     "run_scenario",
+    "run_sweep",
     "get_run",
     "get_run_series",
     "list_runs",

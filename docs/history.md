@@ -78,8 +78,8 @@ DOI 10.1016/j.ifacol.2015.08.199). The revised kernel `temexd_mod.c` introduced:
   random-number generation from solver function-evaluations, making results
   reproducible under arbitrary solvers.
 - **Separate generators** for process disturbances and measurement noise.
-- **Eight new disturbances** (`IDV 21–28`) and the option to scale disturbance
-  magnitude.
+- **Eight new disturbances** (`IDV 21–28`) exposed through the kernel's binary
+  activation interface.
 - **Extended measurements** and the option to log previously hidden internal
   variables.
 - **All six production operating modes**, and roughly 45% lower runtime than the

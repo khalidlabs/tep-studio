@@ -17,6 +17,8 @@ tool logic is unit-testable on its own.
 
 from __future__ import annotations
 
+from dataclasses import asdict
+from statistics import fmean
 from typing import Any
 
 from tep_studio import (
@@ -98,15 +100,20 @@ Workflow:
    manipulated variables, setpoints, operating modes, and ScenarioConfig fields.
 2. Build a ScenarioConfig dict and call `run_scenario`. Names and bounds are
    validated; on an error, read the message and fix the dict (valid IDV names are
-   idv_01..idv_28; magnitudes are 0..1; MVs are 0..100%).
+   idv_01..idv_28; IDV activations are binary 0 or 1; MVs are 0..100%).
 3. Inspect with `get_run` / `get_run_series` and contrast scenarios with
-   `compare_runs`. Reference prior runs by the `run_id` you got back.
+   `compare_runs`. Use `run_sweep` for a predeclared set of matched scenarios or
+   stochastic seeds. Reference prior runs by the `run_id` you got back.
 
 Key facts to reason with:
 - The base plant (mode1) is OPEN-LOOP UNSTABLE and trips on high reactor pressure
   (~3000 kPa) within ~1 h. Use loop_type="closed" (the built-in Ricker PI
   controller) for runs that survive the horizon.
-- IDV disturbances are LATCHED: once activated at `start_time` they stay on.
+- IDV disturbances are BINARY and LATCHED: 0 is off, 1 is on, and once activated
+  at `start_time` they stay on. Intermediate values are invalid; they are not
+  partial-severity disturbances.
+- Evaluate safety against every published constraint and its minimum margin, not
+  reactor pressure alone. A negative margin is a constraint violation.
 - Setpoints are closed-loop targets (see describe_plant.setpoints for unit, Mode-1
   nominal, and the `measured_as` signal). `production_rate` is the stripper-underflow
   throughput (m3/h) and is SLOW/rate-limited — give it a long horizon to reach a new
@@ -114,6 +121,8 @@ Key facts to reason with:
   e.g. production_rate -> stripper_underflow); get_run_series also accepts the
   setpoint name and maps it for you.
 - Always report the exact config you ran (it is returned for reproducibility).
+- In run metadata, `truncated=true` means the requested horizon was reached without
+  a shutdown; it does not mean that the simulation output was cut off.
 - Keep horizons modest (a few to a few tens of hours) for interactive use.
 """
 
@@ -126,7 +135,10 @@ _SCENARIO_CONFIG_FIELDS = {
     "solver_method": f"integrator, one of {list(_SOLVERS)} (RK4 = fast fixed-step default)",
     "fixed_step": "RK4/Euler substep in hours (default 0.0005; the model is stiff)",
     "seed": "optional native stochastic seed (float or null) for measurement noise and enabled stochastic disturbances",
-    "disturbances": "list of {idv, magnitude (0..1), start_time (h)}; IDVs are latched",
+    "disturbances": (
+        "list of {idv, magnitude, start_time (h)}; magnitude is a compatibility field "
+        "restricted to binary 0 (off) or 1 (on), and active IDVs are latched"
+    ),
     "setpoints": "closed-loop only: {setpoint_field: value} overrides (see setpoints list)",
     "enable_composition": "closed-loop composition control on/off (default true)",
     "enable_overrides": "high-pressure/level safety overrides on/off",
@@ -157,16 +169,29 @@ class TepToolset:
             "modes": list(_MODES),
             "loop_types": ["closed", "open"],
             "solver_methods": list(_SOLVERS),
-            "disturbances": [{"name": n, "description": d} for n, d in list_disturbances()],
+            "disturbances": [
+                {
+                    "name": variable.name,
+                    "legacy_symbol": variable.legacy_symbol,
+                    "description": variable.description,
+                    "activation_values": [0, 1],
+                    "latched": True,
+                    "root_cause_status": variable.root_cause_status,
+                    "perturbation_model": variable.perturbation_model,
+                }
+                for variable in TEP_SCHEMA.disturbances
+            ],
             "manipulated_variables": [
                 {"name": n, "unit": u, "description": d} for n, u, d in list_manipulated_variables()
             ],
             "measurements": [{"name": n, "unit": u, "description": d} for n, u, d in list_measurements()],
             "setpoints": _setpoint_catalog(),
+            "constraints": [asdict(constraint) for constraint in TEP_SCHEMA.constraints],
+            "disturbance_input_semantics": TEP_SCHEMA.disturbance_input_semantics,
             "scenario_config_fields": _SCENARIO_CONFIG_FIELDS,
             "notes": (
                 "mode1 is open-loop unstable (trips ~3000 kPa within ~1 h); use loop_type='closed'. "
-                "IDV disturbances are latched. magnitude in 0..1, MVs in 0..100%. "
+                "IDV disturbances are binary latched activations: magnitude must be 0 or 1. MVs are in 0..100%. "
                 "Setpoints are closed-loop targets; a setpoint's measured signal is its 'measured_as' "
                 "column (e.g. production_rate -> measurement.stripper_underflow). production_rate is "
                 "slow/rate-limited — allow a long horizon for it to reach a new target."
@@ -197,6 +222,55 @@ class TepToolset:
         result = _run_scenario(cfg)
         self.store.put(result)
         return {"ok": True, **self._summary(result)}
+
+    def run_sweep(self, configs: list[dict], seeds: list[float] | None = None) -> dict:
+        """Run matched scenario configurations over an optional common seed set.
+
+        Each configuration is validated as in ``run_scenario``. Supplying ``seeds``
+        repeats every configuration at every listed native stochastic seed while
+        holding the other fields fixed. The response includes run summaries and
+        per-configuration shutdown, pressure, and worst constraint-margin aggregates.
+        At most 90 runs may be requested so every result remains inspectable.
+        """
+        if not configs:
+            return {"ok": False, "error": "configs must contain at least one scenario configuration"}
+        seed_values: list[float | None] = list(seeds) if seeds else [None]
+        total = len(configs) * len(seed_values)
+        available = self.store.capacity - len(self.store.ids())
+        if total > 90 or total > available:
+            return {
+                "ok": False,
+                "error": f"sweep requests {total} runs but at most {min(90, available)} can be retained; reduce configs or seeds",
+            }
+
+        groups: list[dict[str, Any]] = []
+        all_runs: list[dict[str, Any]] = []
+        for config_index, source in enumerate(configs):
+            group_runs: list[dict[str, Any]] = []
+            for seed_index, seed in enumerate(seed_values):
+                config = dict(source)
+                if seeds:
+                    config["seed"] = float(seed) if seed is not None else None
+                base_name = str(config.get("name", f"scenario_{config_index + 1}"))
+                config["name"] = f"{base_name}_seed_{seed_index}" if seeds else base_name
+                outcome = self.run_scenario(config)
+                if not outcome.get("ok"):
+                    return {
+                        "ok": False,
+                        "error": f"config {config_index}, seed {seed!r}: {outcome.get('error', 'run failed')}",
+                        "completed_runs": all_runs,
+                    }
+                group_runs.append(outcome)
+                all_runs.append(outcome)
+            groups.append(self._sweep_group(config_index, source, group_runs))
+        return {
+            "ok": True,
+            "config_count": len(configs),
+            "seeds": list(seeds or []),
+            "run_count": len(all_runs),
+            "groups": groups,
+            "runs": [self._compact_sweep_run(run) for run in all_runs],
+        }
 
     def get_run(self, run_id: str) -> dict:
         """Fetch the summary, exact config, and available plot columns for a prior run_id."""
@@ -256,9 +330,15 @@ class TepToolset:
                 runs.append(result.summary())
         return {"ok": True, "count": len(runs), "runs": runs}
 
-    def compare_runs(self, run_ids: list[str]) -> dict:
-        """Compare prior runs side by side (summaries: shutdown, final time, peak pressure, IAE/ISE)."""
+    def compare_runs(self, run_ids: list[str], reference_run_id: str | None = None) -> dict:
+        """Compare runs, safety margins, and measurement deviations side by side.
+
+        The first run is the reference unless ``reference_run_id`` is supplied.
+        For runs with common recorded times, all common measurements receive a
+        maximum absolute reference-relative deviation.
+        """
         rows, missing = [], []
+        results: dict[str, Any] = {}
         for run_id in run_ids:
             result = self.store.get(run_id)
             if result is None:
@@ -267,12 +347,58 @@ class TepToolset:
             row = dict(result.summary())
             row["shutdown"] = result.shutdown
             rows.append(row)
+            results[run_id] = result
         out: dict[str, Any] = {"ok": bool(rows), "runs": rows}
+        reference_id = reference_run_id or (rows[0]["run_id"] if rows else None)
+        if reference_id is not None and reference_id in results:
+            reference = results[reference_id]
+            out["reference_run_id"] = reference_id
+            out["measurement_max_abs_delta_vs_reference"] = {
+                run_id: _measurement_max_abs_delta(reference, result)
+                for run_id, result in results.items()
+                if run_id != reference_id
+            }
+        elif reference_run_id is not None:
+            missing.append(reference_run_id)
         if missing:
-            out["missing_run_ids"] = missing
+            out["missing_run_ids"] = list(dict.fromkeys(missing))
         if not rows:
             out["error"] = "no valid run_ids"
         return out
+
+    @staticmethod
+    def _sweep_group(config_index: int, source: dict, runs: list[dict[str, Any]]) -> dict[str, Any]:
+        peaks = [float(run["peak_reactor_pressure"]) for run in runs if run.get("peak_reactor_pressure") is not None]
+        constraint_names = {name for run in runs for name in run.get("minimum_constraint_margins", {})}
+        return {
+            "config_index": config_index,
+            "source_config": source,
+            "run_ids": [run["run_id"] for run in runs],
+            "shutdown_count": sum(bool(run.get("terminated")) for run in runs),
+            "constraint_violation_run_count": sum(int(run.get("constraint_violation_steps", 0)) > 0 for run in runs),
+            "peak_reactor_pressure": {
+                "min": min(peaks) if peaks else None,
+                "mean": fmean(peaks) if peaks else None,
+                "max": max(peaks) if peaks else None,
+            },
+            "worst_minimum_constraint_margins": {
+                name: min(float(run["minimum_constraint_margins"][name]) for run in runs)
+                for name in sorted(constraint_names)
+            },
+        }
+
+    @staticmethod
+    def _compact_sweep_run(run: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "run_id": run["run_id"],
+            "name": run["name"],
+            "seed": run["config"].get("seed"),
+            "terminated": run["terminated"],
+            "time_to_shutdown": run.get("time_to_shutdown"),
+            "peak_reactor_pressure": run.get("peak_reactor_pressure"),
+            "constraint_violation_steps": run.get("constraint_violation_steps", 0),
+            "minimum_constraint_margins": run.get("minimum_constraint_margins", {}),
+        }
 
     # -- Anthropic / MCP integration --------------------------------------
     def tool_specs(self) -> list[dict]:
@@ -290,6 +416,18 @@ class TepToolset:
                     "type": "object",
                     "properties": {"config": {"type": "object", "description": "ScenarioConfig dict (see describe_plant.scenario_config_fields)"}},
                     "required": ["config"],
+                },
+            },
+            {
+                "name": "run_sweep",
+                "description": self.run_sweep.__doc__,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "configs": {"type": "array", "items": {"type": "object"}, "minItems": 1},
+                        "seeds": {"type": "array", "items": {"type": "number"}},
+                    },
+                    "required": ["configs"],
                 },
             },
             {
@@ -320,7 +458,10 @@ class TepToolset:
                 "description": self.compare_runs.__doc__,
                 "input_schema": {
                     "type": "object",
-                    "properties": {"run_ids": {"type": "array", "items": {"type": "string"}}},
+                    "properties": {
+                        "run_ids": {"type": "array", "items": {"type": "string"}},
+                        "reference_run_id": {"type": "string"},
+                    },
                     "required": ["run_ids"],
                 },
             },
@@ -333,6 +474,8 @@ class TepToolset:
             return self.describe_plant()
         if name == "run_scenario":
             return self.run_scenario(args.get("config", {}))
+        if name == "run_sweep":
+            return self.run_sweep(args.get("configs", []), args.get("seeds"))
         if name == "get_run":
             return self.get_run(args.get("run_id", ""))
         if name == "get_run_series":
@@ -340,7 +483,7 @@ class TepToolset:
         if name == "list_runs":
             return self.list_runs()
         if name == "compare_runs":
-            return self.compare_runs(args.get("run_ids", []))
+            return self.compare_runs(args.get("run_ids", []), args.get("reference_run_id"))
         return {"ok": False, "error": f"unknown tool {name!r}"}
 
     # -- helpers ----------------------------------------------------------
@@ -385,3 +528,24 @@ def _resolve_column(columns: list[str], var: str) -> str | None:
         if candidate in columns:
             return candidate
     return None
+
+
+def _measurement_max_abs_delta(reference: Any, candidate: Any) -> dict[str, float]:
+    """Compare common measurement columns at common recorded times."""
+    reference_frame = reference.to_frame().set_index("time")
+    candidate_frame = candidate.to_frame().set_index("time")
+    common_times = reference_frame.index.intersection(candidate_frame.index)
+    common_columns = sorted(
+        set(column for column in reference_frame.columns if column.startswith("measurement."))
+        & set(column for column in candidate_frame.columns if column.startswith("measurement."))
+    )
+    if common_times.empty:
+        return {}
+    deltas: dict[str, float] = {}
+    for column in common_columns:
+        difference = (
+            candidate_frame.loc[common_times, column].astype(float)
+            - reference_frame.loc[common_times, column].astype(float)
+        ).abs()
+        deltas[column.removeprefix("measurement.")] = round(float(difference.max()), 6)
+    return deltas

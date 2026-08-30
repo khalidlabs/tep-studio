@@ -87,6 +87,11 @@ Each variable stores:
 
 ## Disturbances
 
+The 28 legacy IDV entries are binary, latched activations. The public scenario
+schema accepts only `0` (off) or `1` (on). It does not expose intermediate values
+as a continuous severity scale. Disturbances whose physical root cause is not
+specified by the legacy model retain that status explicitly.
+
 | Index | Name | Description |
 | ---: | --- | --- |
 | 0 | `idv_01` | A/C ratio of stream 4, B composition constant. |
@@ -117,6 +122,14 @@ Each variable stores:
 | 25 | `idv_26` | Random A and C feed pressure/flow. |
 | 26 | `idv_27` | Random reactor cooling-water pressure/flow. |
 | 27 | `idv_28` | Random condenser cooling-water pressure/flow. |
+
+## Published constraints
+
+`TEP_SCHEMA.constraints` names the eight terminal limits used by the simulator.
+They cover high reactor pressure, high and low reactor level, high reactor
+temperature, high and low separator level, and high and low stripper level.
+`TEP_SCHEMA.constraint_margins(measurements)` returns a positive value inside
+each limit, zero at the limit, and a negative value after violation.
 
 ## Print schema names
 

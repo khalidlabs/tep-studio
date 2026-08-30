@@ -49,6 +49,11 @@ class RunResult:
             "peak_reactor_pressure": _round(self.peak.get("reactor_pressure_max")),
             "iae_reactor_pressure": _round(iae.get("reactor_pressure"), 3),
             "ise_reactor_pressure": _round(ise.get("reactor_pressure"), 3),
+            "constraint_violation_steps": int(metrics.get("constraint_violation_steps", 0)),
+            "constraint_violation_time_h": _round(metrics.get("constraint_violation_time_h"), 4),
+            "minimum_constraint_margins": {
+                name: _round(value, 4) for name, value in metrics.get("constraint_min_margins", {}).items()
+            },
             "time_to_shutdown": _round(metrics.get("time_to_shutdown"), 3),
             "created_at": self.created_at,
         }

@@ -30,7 +30,7 @@ class DisturbanceActivation:
     """A single disturbance switched on at ``start_time`` (TEP IDVs are latched)."""
 
     idv: str  # schema name, e.g. "idv_01"
-    magnitude: float = 1.0  # 0..1 (most IDVs are 0/1 switches)
+    magnitude: float = 1.0  # compatibility field; TEP accepts only binary 0 (off) or 1 (on)
     start_time: float = 0.0  # hours
 
 
@@ -89,8 +89,11 @@ class ScenarioConfig:
         for dst in self.disturbances:
             if dst.idv not in idv_names:
                 errors.append(f"unknown disturbance {dst.idv!r}")
-            if not 0.0 <= dst.magnitude <= 1.0:
-                errors.append(f"disturbance {dst.idv} magnitude {dst.magnitude} out of [0,1]")
+            if dst.magnitude not in (0.0, 1.0):
+                errors.append(
+                    f"disturbance {dst.idv} magnitude {dst.magnitude} is invalid; "
+                    "TEP IDVs are binary activations and must be 0 or 1"
+                )
             if dst.start_time < 0:
                 errors.append(f"disturbance {dst.idv} start_time must be >= 0")
 
@@ -198,7 +201,7 @@ class ScenarioConfig:
             disturbances=tuple(DisturbanceActivation(**x) for x in d.get("disturbances", [])),
             setpoints=None if d.get("setpoints") is None else {k: float(v) for k, v in d["setpoints"].items()},
             enable_composition=bool(d.get("enable_composition", True)),
-            enable_overrides=bool(d.get("enable_overrides", False)),
+            enable_overrides=bool(d.get("enable_overrides", True)),
             enable_pct_g_feedback=bool(d.get("enable_pct_g_feedback", False)),
             manual_mvs=None if d.get("manual_mvs") is None else {k: float(v) for k, v in d["manual_mvs"].items()},
             initial_state=None if d.get("initial_state") is None else tuple(float(x) for x in d["initial_state"]),

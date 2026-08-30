@@ -361,7 +361,7 @@ ABOUT_SECTIONS = {
                     },
                     {
                         "term": "Disturbances (IDVs)",
-                        "text": "Select one or more IDVs to inject, set a single Activation time (h), and give each a magnitude in the per-IDV fields that appear."
+                        "text": "Select one or more IDVs, set one activation time (h), and use the per-IDV binary field to switch each disturbance off (0) or on (1)."
                     },
                     {
                         "term": "Plot panel",

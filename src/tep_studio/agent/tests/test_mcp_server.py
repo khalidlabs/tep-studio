@@ -19,6 +19,8 @@ def test_describe_plant_catalogs():
     assert len(info["measurements"]) == 41
     assert "mode1" in info["modes"]
     assert info["disturbances"][0]["name"] == "idv_01"
+    assert info["disturbances"][0]["activation_values"] == [0, 1]
+    assert len(info["constraints"]) == 8
     assert "reactor_pressure" in {v["name"] for v in info["measurements"]}
     assert "loop_type" in info["scenario_config_fields"]
 
@@ -41,6 +43,12 @@ def test_run_scenario_invalid_disturbance_is_a_repairable_error():
     assert out["ok"] is False
     assert "idv_99" in out["error"]
     assert "hint" in out
+
+
+def test_run_scenario_rejects_partial_idv_that_native_bridge_would_disable():
+    out = m.run_scenario({**_tiny_closed(), "disturbances": [{"idv": "idv_01", "magnitude": 0.25}]})
+    assert out["ok"] is False
+    assert "binary activations" in out["error"]
 
 
 def test_run_scenario_rejects_runaway_horizon():
@@ -88,6 +96,22 @@ def test_list_and_compare_runs():
     cmp = m.compare_runs([a, b, "ghost"])
     assert {r["run_id"] for r in cmp["runs"]} == {a, b}
     assert cmp["missing_run_ids"] == ["ghost"]
+    assert cmp["reference_run_id"] == a
+    assert b in cmp["measurement_max_abs_delta_vs_reference"]
+
+
+def test_run_sweep_returns_matched_aggregates_and_constraints():
+    out = m.run_sweep(
+        [
+            {**_tiny_closed(), "name": "baseline"},
+            {**_tiny_closed(), "name": "idv1", "disturbances": [{"idv": "idv_01", "magnitude": 1.0}]},
+        ],
+        [1.0, 2.0],
+    )
+    assert out["ok"] is True
+    assert out["run_count"] == 4
+    assert len(out["groups"]) == 2
+    assert "reactor_pressure_high" in out["groups"][0]["worst_minimum_constraint_margins"]
 
 
 def test_build_server_registers_tools():

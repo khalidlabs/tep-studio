@@ -80,6 +80,7 @@ def test_availability_timing_and_bounds_match_legacy_c_source() -> None:
     assert "teproc_.vcv[i__ - 1] > (float)100." in source
     assert "dvec_.idv[i__ - 1] < (float)0." in source
     assert "dvec_.idv[i__ - 1] > (float)1." in source
+    assert "*uPtrs[i + NU] >= 0.5" in source
 
 
 def test_measurement_availability_and_analyzer_timing() -> None:
@@ -123,9 +124,23 @@ def test_action_and_native_rng_semantics_are_explicit() -> None:
     assert "inside the legacy kernel" in TEP_SCHEMA.actuator_semantics
     assert "measurement noise" in TEP_SCHEMA.native_rng_semantics
     assert "stochastic disturbances" in TEP_SCHEMA.native_rng_semantics
+    assert "binary latched activations" in TEP_SCHEMA.disturbance_input_semantics
     assert {
         variable.legacy_symbol for variable in TEP_SCHEMA.disturbances if variable.root_cause_status == "unknown"
     } == {"IDV(16)", "IDV(17)", "IDV(18)", "IDV(20)"}
+
+
+def test_safety_constraints_are_published_and_compute_margins() -> None:
+    assert len(TEP_SCHEMA.constraints) == 8
+    measurements = [0.0] * len(TEP_SCHEMA.measurements)
+    measurements[TEP_SCHEMA.index("measurements", "reactor_pressure")] = 2900.0
+    measurements[TEP_SCHEMA.index("measurements", "reactor_level")] = 50.0
+    measurements[TEP_SCHEMA.index("measurements", "reactor_temperature")] = 170.0
+    measurements[TEP_SCHEMA.index("measurements", "separator_level")] = 50.0
+    measurements[TEP_SCHEMA.index("measurements", "stripper_level")] = 50.0
+    margins = TEP_SCHEMA.constraint_margins(measurements)
+    assert margins["reactor_pressure_high"] == 100.0
+    assert margins["reactor_temperature_high"] == 5.0
 
 
 def test_conformance_report_is_generated_and_json_serializable() -> None:

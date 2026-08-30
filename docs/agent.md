@@ -27,14 +27,20 @@ The tool logic needs only the core dependencies. `mcp` is used by the server and
 | --- | --- |
 | `describe_plant` | The schema catalog: disturbances (IDVs), measurements, manipulated variables, setpoints, modes, and the `ScenarioConfig` fields. Call this first. |
 | `run_scenario(config)` | Validate a `ScenarioConfig` dict, run it, and return a `run_id` and a compact summary. The exact config is echoed back for reproducibility. |
+| `run_sweep(configs, seeds)` | Run matched configurations over a common optional seed set and return run-level and aggregate safety results. |
 | `get_run(run_id)` | Summary, config, and available plot columns for a prior run. |
 | `get_run_series(run_id, variables)` | Downsampled time series for named variables. |
-| `list_runs` / `compare_runs(run_ids)` | List and contrast cached runs. |
+| `list_runs` / `compare_runs(run_ids)` | List and contrast cached runs, including minimum safety margins and reference-relative measurement deviations. |
 
 A few choices keep this reliable rather than free-form:
 
 - Names come from `TEP_SCHEMA`, and `describe_plant` reports exactly what is valid,
   so the model configures from the catalog instead of guessing.
+- TEP disturbances use binary latched activation. The compatibility field
+  `magnitude` accepts only 0 or 1, avoiding the misleading interpretation that an
+  intermediate number represents partial severity.
+- All eight shutdown constraints are published, and summaries report their
+  minimum margins over the complete run.
 - Validation doubles as the repair loop. `run_scenario` calls
   `ScenarioConfig.from_dict`, which checks names and bounds and returns a
   descriptive error (`{"ok": false, "error": ...}`) the model can read, fix, and

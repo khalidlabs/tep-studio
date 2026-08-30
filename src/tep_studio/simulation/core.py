@@ -300,18 +300,8 @@ class TennesseeEastmanProcess:
             "objective_terms": self._objective_terms(outputs),
         }
 
-    @staticmethod
-    def _constraint_margins(measurements: np.ndarray) -> dict[str, float]:
-        return {
-            "reactor_pressure_high": 3000.0 - float(measurements[6]),
-            "reactor_level_high": 100.0 - float(measurements[7]),
-            "reactor_level_low": float(measurements[7]),
-            "reactor_temperature_high": 175.0 - float(measurements[8]),
-            "separator_level_high": 100.0 - float(measurements[11]),
-            "separator_level_low": float(measurements[11]),
-            "stripper_level_high": 100.0 - float(measurements[14]),
-            "stripper_level_low": float(measurements[14]),
-        }
+    def _constraint_margins(self, measurements: np.ndarray) -> dict[str, float]:
+        return self.schema.constraint_margins(measurements)
 
     @staticmethod
     def _events(code: float, message: str) -> tuple[dict[str, Any], ...]:
