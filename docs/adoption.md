@@ -1,12 +1,11 @@
-# Adopt the Architecture for Your Own Process
+# Adopting the Architecture for Another Process
 
-This guide is for a process owner who has a dynamic model of a process other
-than the Tennessee Eastman Process (TEP) and wants to apply the architecture in
-the paper.
+This guide explains how to apply the architecture described in the paper to a
+dynamic model of a process other than the Tennessee Eastman Process (TEP).
 
-You do **not** need to replace your simulator, rewrite its equations in Python,
-or use the same software as TEP Studio. You keep the simulator you already trust
-and add three things around it:
+You do **not** need to replace a validated simulator, rewrite its equations in
+Python, or use the TEP Studio software stack. Retain the existing simulator and
+add three elements around it:
 
 ```text
 Your existing simulator
@@ -24,66 +23,70 @@ A small connector that starts, advances, and reads the simulator
 Validation evidence checks the complete path.
 ```
 
-The important rule is that all interfaces use the **same connector** and the
-**same process description**. They should not maintain separate copies of tags,
-units, limits, or process logic.
+All interfaces must use the **same connector** and the **same process
+description**. Separate copies of tags, units, limits, or process logic should
+not be maintained.
 
-Here, “machine-readable” simply means that the reviewed information is also
-saved in a structured file, usually JSON, so software can use it without copying
-values from a document.
+In this guide, “machine-readable” means that reviewed process information is
+stored in a structured file, usually JSON, so software can use it without
+copying values from a document.
 
-## The whole job at a glance
+## Workflow overview
 
 1. Choose a small pilot.
 2. Describe the process in a spreadsheet.
-3. Select the safest way to connect the existing simulator.
-4. Give that connection five standard operations.
-5. Agree on timing, action, ending, and randomness rules.
-6. Add the user interface needed for the pilot.
+3. Select an appropriate connection to the existing simulator.
+4. Implement five standard operations through that connection.
+5. Define the timing, action, termination, and randomness rules.
+6. Add the interface required for the pilot.
 7. Validate the description and behavior against independent evidence.
 8. Publish the description, connector, example, and validation record together.
 
-## What you need before starting
+## Prerequisites
 
-Bring together:
+Before starting, you should have:
 
 1. **A working dynamic model.** This may be an FMU, a Python or MATLAB model, a
    Simulink model, or a commercial simulator with an automation interface.
-2. **A process expert.** This person confirms what each variable means, what is
-   measurable online, and which limits and events matter.
-3. **An implementation partner.** A software engineer, model developer, or
-   simulator vendor connects the model to the small interface described below.
-4. **One pilot use case.** Start with one operating mode and one useful task,
+2. **Authoritative process information.** You need enough documentation to
+   confirm what each variable means, what is measurable online, and which limits
+   and events matter.
+3. **Access to the simulator interface.** You must be able to start, advance,
+   read, and write the model through its supported interface. The required
+   technical work depends on whether that interface is FMI, Python,
+   MATLAB/Simulink, or a vendor-supported API.
+4. **One pilot use case.** Select one operating mode and one useful task,
    such as generating a training dataset or testing a controller.
 
 TEP Studio is a reference implementation, not a no-code converter. A process
-expert can complete the description and acceptance decisions without
-programming, but someone must implement the connector to the chosen simulator.
+description can be prepared without programming. You must then implement the
+connector through an interface supported by the selected simulator.
 
 ## Step 1: Choose a small pilot
 
-Do not begin with an entire plant. Select one model boundary that can be tested
-clearly—for example, a reactor and its existing control loops in one operating
+Begin with a model boundary that can be tested clearly rather than an entire
+plant—for example, a reactor and its existing control loops in one operating
 mode.
 
 Write a one-page pilot scope that answers:
 
 - Which simulator and model version are authoritative?
 - Which operating mode and initial condition will be supported first?
-- Which manipulated variables can an external user request?
+- Which manipulated variables may be requested externally?
 - Which measurements are actually available online?
 - Which shutdowns, constraints, or completion events end a run?
-- What first interface is useful: a dataset, online control, optimization, or an
-  agent?
+- Which interface is required first: dataset generation, online control,
+  optimization, or agent access?
 
 **Output of this step:** a bounded pilot that can be accepted or rejected using
 known scenarios.
 
 ## Step 2: Describe the process in a spreadsheet
 
-Complete the [process-description worksheet](adoption-process-description-template.csv)
-with the process expert. The example rows can be replaced with the tags from your
-model.
+Complete the
+[process-description worksheet](adoption-process-description-template.csv)
+using the authoritative tags and definitions for the model. Replace the example
+rows with the variables from your process.
 
 Record at least the following:
 
@@ -101,13 +104,12 @@ each name so the description can be checked against an independent source.
 Unknown information should be left unset or marked unknown; it should not be
 guessed.
 
-**Output of this step:** one reviewed register of process meaning. The technical
-team will later convert this worksheet to JSON or another structured file that
-software can read.
+**Output of this step:** one reviewed register of process meaning, converted to
+JSON or another structured format that software can read.
 
 ## Step 3: Choose how to connect the existing simulator
 
-Use the least invasive connection available:
+Use the least invasive supported connection:
 
 | Your current model | Practical starting point |
 | --- | --- |
@@ -117,18 +119,18 @@ Use the least invasive connection available:
 | Commercial or proprietary simulator | Use a vendor-supported connection, such as an FMU, COM, REST, or OPC interface. Do not duplicate the process equations. |
 | Equations only | Implement and validate a numerical model first. This is a larger modeling project, not merely an interface task. |
 
-The connector should translate between your simulator's native tags or arrays and
-the names in the process-description worksheet. It should not redefine the
-physics.
+The connector must translate between the simulator's native tags or arrays and
+the names in the process-description worksheet. It must not redefine the
+process equations.
 
-**Output of this step:** a documented connection method and a named owner for its
-implementation.
+**Output of this step:** a documented connection method and an implementation
+plan for the connector.
 
 ## Step 4: Implement one small simulator contract
 
-Ask the implementation partner to expose five operations:
+Expose five operations through the connector:
 
-| Operation | Meaning in plain language |
+| Operation | Purpose |
 | --- | --- |
 | `reset` | Start a new run from a declared operating mode or initial condition. |
 | `advance` | Apply requested inputs and disturbances for one declared interval, advance the model, and return the result. |
@@ -150,10 +152,9 @@ This is the only layer that should directly operate the simulator.
 **Output of this step:** one successful reset-and-advance example whose results
 have clear names and units.
 
-## Step 5: Agree on four behavior rules
+## Step 5: Define four behavior rules
 
-Before building user interfaces, the process owner and implementer must agree on
-four rules:
+Before building interfaces, define four rules:
 
 1. **Time and availability.** A value is exposed only when it would be available
    in operation. Sampled analyzers retain their sampling, delay, and hold
@@ -170,30 +171,30 @@ four rules:
 Put these decisions in the process description. Do not leave them only in a user
 manual.
 
-**Output of this step:** an approved interaction contract with no ambiguous time,
-action, ending, or random-seed conventions.
+**Output of this step:** a documented interaction contract with no ambiguous
+time, action, termination, or random-seed conventions.
 
-## Step 6: Add the interfaces you actually need
+## Step 6: Add the required interfaces
 
 Build each interface as a view over the same description and `advance` result:
 
 | Need | Interface to add | What it reuses |
 | --- | --- | --- |
-| Run the model interactively or from a controller | Online/control interface | Published measurements, allowed actions, limits, events, and time semantics |
+| Run the model interactively or from a controller | Online/control interface | Published measurements, permitted actions, limits, events, and time semantics |
 | Generate data for ML, monitoring, or system identification | Dataset interface | The same transitions, written as named interval records with units and a record of how the run was produced |
 | Evaluate candidate decisions over a horizon | Optimization interface | Snapshot/restore, constraints, objective terms, and deterministic rollout settings |
 | Let an AI assistant discover and run the model | Agent interface | The same names, descriptions, allowed ranges, scenario fields, and validation rules |
 
-Start with the core plus the one interface selected in Step 1. Add the others only
-when there is a real use case. The architecture does not require four separate
-simulator implementations.
+Start with the core and the interface selected in Step 1. Add other interfaces
+only when they are required. The architecture does not require separate
+simulator implementations for each interface.
 
 **Output of this step:** the pilot task working through a generated interface,
 without a second variable catalog or second copy of the equations.
 
-## Step 7: Validate before calling it self-describing
+## Step 7: Validate the implementation
 
-Use independent evidence wherever possible. At minimum, require these checks:
+Use independent evidence wherever possible. At minimum, perform these checks:
 
 | Check | Passing result |
 | --- | --- |
@@ -213,7 +214,7 @@ tolerances, the results, and what remains unvalidated.
 
 ## Step 8: Publish a small adoption package
 
-Give future users these six items:
+Publish these six items:
 
 1. `process_description.json` — the reviewed process register and interaction
    rules, with a content hash.
@@ -227,13 +228,13 @@ Give future users these six items:
 6. A short README — how to install or connect, run the example, and interpret the
    result.
 
-For an initial deployment, portable files are enough. An external database,
+For an initial deployment, portable files are sufficient. An external database,
 message broker, or cloud platform is optional and should be introduced only when
-the operating environment requires it.
+required by the operating environment.
 
-## What “done” looks like
+## Completion criteria
 
-Your pilot is complete when a new user can:
+The pilot is complete when another user can:
 
 - read one description and understand the supported variables and rules;
 - start and advance the trusted simulator through one connector;
@@ -257,8 +258,8 @@ stack for another process.
 | Agent interface | Six MCP tools served by `tep-mcp` |
 | Validation evidence | Schema-conformance tests and generated validation artifacts |
 
-Developers evaluating the reference implementation can install it and export its
-complete description with:
+The reference implementation can be installed and its complete description
+exported with:
 
 ```bash
 python3 -m pip install -e .
