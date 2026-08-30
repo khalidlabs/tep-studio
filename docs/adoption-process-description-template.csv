@@ -1,0 +1,7 @@
+record_type,plain_name,source_tag_or_index,description,unit,lower_bound,upper_bound,nominal_value,available_online,update_pattern,sample_period,delay,requested_or_implemented,authority,root_cause_status,notes
+measurement,EXAMPLE_reactor_pressure,EXAMPLE_TAG_101,Replace with the process meaning,kPa,0,3000,2700,yes,continuous,,,,,known,Replace or delete this example row
+state,EXAMPLE_reactor_inventory,EXAMPLE_STATE_01,Internal inventory used by the model,kmol,,,100,no,continuous,,,,,known,Replace or delete this example row
+manipulated_variable,EXAMPLE_cooling_valve,EXAMPLE_MV_01,Requested cooling-water valve command,percent,0,100,50,yes,continuous,,0,requested,external in open loop,,State whether implemented value is command or measured position
+disturbance,EXAMPLE_feed_change,EXAMPLE_DV_01,Change in feed composition,activation,0,1,0,yes,scheduled,,,,,unknown,Unknown is acceptable when the perturbation is defined
+event,EXAMPLE_high_pressure_trip,EXAMPLE_EVENT_01,High-pressure process shutdown,kPa,,,3000,yes,event_driven,,,,,,State whether this terminates the process
+objective,EXAMPLE_operating_cost,EXAMPLE_COST_01,Operating cost accumulated over each interval,USD_per_hour,,,,yes,continuous,,,,,,State whether reported value is a rate or interval total
