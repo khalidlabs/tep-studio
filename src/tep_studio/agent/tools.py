@@ -125,7 +125,7 @@ _SCENARIO_CONFIG_FIELDS = {
     "control_interval": "control/sampling interval in hours (default 0.01)",
     "solver_method": f"integrator, one of {list(_SOLVERS)} (RK4 = fast fixed-step default)",
     "fixed_step": "RK4/Euler substep in hours (default 0.0005; the model is stiff)",
-    "seed": "optional measurement-noise seed (float or null) for reproducibility",
+    "seed": "optional native stochastic seed (float or null) for measurement noise and enabled stochastic disturbances",
     "disturbances": "list of {idv, magnitude (0..1), start_time (h)}; IDVs are latched",
     "setpoints": "closed-loop only: {setpoint_field: value} overrides (see setpoints list)",
     "enable_composition": "closed-loop composition control on/off (default true)",

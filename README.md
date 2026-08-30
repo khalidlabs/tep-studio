@@ -29,7 +29,9 @@ result = ClosedLoopSimulation(horizon=24.0).run()
 ```
 
 Or from the terminal: `tep run --horizon 24 --idv idv_01@1.0`, `tep list disturbances`,
-`tep ui`. See the [Cookbook](docs/cookbook.md) for task recipes.
+`tep describe --out process_description.json`, `tep ui`. New users can follow the
+[Adoption workflow](docs/adoption.md); the [Cookbook](docs/cookbook.md) provides
+additional task recipes.
 
 ## Build
 

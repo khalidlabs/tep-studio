@@ -23,13 +23,12 @@ MODEL_LEAKAGE_POLICY = {
 
 
 def process_description_hash(schema: ProcessSchema = TEP_SCHEMA) -> str:
-    payload = {
-        "name": schema.name,
-        "states": schema.names("states"),
-        "manipulated_variables": schema.names("manipulated_variables"),
-        "measurements": schema.names("measurements"),
-    }
-    blob = json.dumps(payload, sort_keys=True).encode("utf-8")
+    blob = json.dumps(
+        schema.to_canonical_dict(),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
     return "sha256:" + hashlib.sha256(blob).hexdigest()
 
 

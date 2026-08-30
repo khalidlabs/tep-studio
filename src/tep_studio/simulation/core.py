@@ -82,7 +82,8 @@ class TennesseeEastmanProcess:
                 operating-point state; the others start from the base case.
             initial_state: optional full 50-element state to start from (overrides the
                 mode's default; defaults to the base steady state).
-            seed: optional measurement-noise seed for reproducibility.
+            seed: optional native stochastic seed for reproducible measurement noise
+                and enabled stochastic disturbances.
             disturbances: optional 28-element IDV activation vector (defaults to none).
             ms_flag: measurement/feature bitmask forwarded to the kernel.
 
@@ -265,13 +266,19 @@ class TennesseeEastmanProcess:
         self.time = float(snapshot.time)
 
     def validate(self) -> dict[str, Any]:
-        checks = {
-            "state_count": len(self.schema.states) == 50,
-            "mv_count": len(self.schema.manipulated_variables) == 12,
-            "disturbance_count": len(self.schema.disturbances) == 28,
-            "measurement_count": len(self.schema.measurements) == 41,
+        kernel_checks = {
+            "state_count": len(self.schema.states) == self.kernel.nx,
+            "mv_count": len(self.schema.manipulated_variables) == self.kernel.nu,
+            "disturbance_count": len(self.schema.disturbances) == self.kernel.nidv,
+            "measurement_count": len(self.schema.measurements) == self.kernel.ny,
+            "additional_measurement_count": len(self.schema.additional_measurements) == self.kernel.nyadd,
+            "disturbance_monitor_count": len(self.schema.disturbance_monitors) == self.kernel.nydist,
+            "process_monitor_count": len(self.schema.process_monitors) == self.kernel.nymonitor,
+            "concentration_monitor_count": len(self.schema.concentration_monitors) == self.kernel.nycomp,
         }
-        return {"ok": all(checks.values()), "checks": checks}
+        schema_validation = self.schema.validate()
+        checks = {**kernel_checks, **{f"schema.{name}": passed for name, passed in schema_validation["checks"].items()}}
+        return {"ok": all(checks.values()), "checks": checks, "errors": schema_validation["errors"]}
 
     def _info(
         self,

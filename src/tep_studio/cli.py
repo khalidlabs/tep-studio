@@ -1,4 +1,4 @@
-"""Command-line interface: ``tep run | dataset | ui | list | version``.
+"""Command-line interface: ``tep run | dataset | describe | ui | list | version``.
 
 A thin terminal front-end over the same backend the web studio uses, so common
 tasks need no Python. The ``run``/``dataset``/``list``/``version`` subcommands are
@@ -6,6 +6,7 @@ Dash-free; only ``tep ui`` needs Dash (install the ``ui`` extra). Examples::
 
     tep run --horizon 24 --idv idv_01@1.0 --setpoint production_rate=24 --out run.csv
     tep dataset --seeds 1,2,3 --horizon 12 --out dataset.csv
+    tep describe --out process_description.json
     tep list disturbances
     tep ui --port 8051
 """
@@ -23,7 +24,12 @@ def _add_scenario_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mode", choices=("mode1", "mode2", "mode3", "mode4", "mode5", "mode6"), default="mode1", help="operating mode (default: mode1)")
     parser.add_argument("--horizon", type=float, default=12.0, help="simulated horizon in hours (default: 12)")
     parser.add_argument("--control-interval", dest="control_interval", type=float, default=0.01, help="step size in hours (default: 0.01)")
-    parser.add_argument("--seed", type=float, default=None, help="measurement-noise seed for reproducibility")
+    parser.add_argument(
+        "--seed",
+        type=float,
+        default=None,
+        help="native stochastic seed for reproducibility",
+    )
     parser.add_argument("--idv", action="append", default=[], metavar="NAME[@TIME]", help="activate a disturbance, e.g. idv_01 or idv_06@2.0 (repeatable)")
     parser.add_argument("--setpoint", action="append", default=[], metavar="KEY=VALUE", help="closed-loop setpoint override (repeatable)")
     parser.add_argument("--mv", action="append", default=[], metavar="KEY=VALUE", help="open-loop manual MV value (repeatable)")
@@ -153,6 +159,30 @@ def _cmd_list(args) -> int:
     return 0
 
 
+def _cmd_describe(args) -> int:
+    """Export the canonical process description and its generated validation checks."""
+    import json
+
+    import tep_studio
+    from tep_studio.control.config import process_description_hash
+
+    schema = tep_studio.TEP_SCHEMA
+    payload = {
+        "tep_studio_version": tep_studio.__version__,
+        "process_description_hash": process_description_hash(schema),
+        "description": schema.to_canonical_dict(),
+        "validation": schema.validate(),
+    }
+    text = json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n"
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        print(f"wrote canonical process description -> {args.out}")
+    else:
+        print(text, end="")
+    return 0
+
+
 def _cmd_benchmark(args) -> int:
     from tep_studio.simulation.benchmark import ALL_IDVS, make_fdd_benchmark
 
@@ -216,6 +246,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_list = sub.add_parser("list", help="list variables by role")
     p_list.add_argument("kind", choices=("disturbances", "measurements", "mvs", "setpoints"))
     p_list.set_defaults(func=_cmd_list)
+
+    p_describe = sub.add_parser(
+        "describe",
+        help="export the canonical process description, content hash, and validation checks as JSON",
+    )
+    p_describe.add_argument("--out", default=None, help="write JSON to this path (default: stdout)")
+    p_describe.set_defaults(func=_cmd_describe)
 
     p_bench = sub.add_parser("benchmark", help="generate a labeled FDD benchmark dataset (fault-free + per-IDV)")
     p_bench.add_argument("--out", required=True, help="output path (.csv/.parquet/.json)")

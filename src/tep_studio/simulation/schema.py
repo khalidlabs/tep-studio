@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -31,6 +32,28 @@ VARIABLE_ROLES = {
     "concentration_monitors",
 }
 
+ROLE_VARIABLE_TYPES = {
+    "states": "state",
+    "manipulated_variables": "manipulated_variable",
+    "disturbances": "disturbance",
+    "measurements": "measurement",
+    "additional_measurements": "additional_measurement",
+    "disturbance_monitors": "disturbance_monitor",
+    "process_monitors": "process_monitor",
+    "concentration_monitors": "concentration_monitor",
+}
+
+TEP_ROLE_COUNTS = {
+    "states": 50,
+    "manipulated_variables": 12,
+    "disturbances": 28,
+    "measurements": 41,
+    "additional_measurements": 32,
+    "disturbance_monitors": 21,
+    "process_monitors": 62,
+    "concentration_monitors": 96,
+}
+
 
 @dataclass(frozen=True)
 class Variable:
@@ -45,11 +68,17 @@ class Variable:
     available_online: bool = True
     legacy_symbol: str | None = None
     legacy_index: int | None = None
+    aliases: tuple[str, ...] = ()
     stream: str | None = None
     component: str | None = None
     physical_type: str | None = None
     measurement_noise: str | None = None
     sample_period: str | None = None
+    update_mode: str = "continuous"
+    sample_period_hours: float | None = None
+    delay_samples: int = 0
+    root_cause_status: str | None = None
+    perturbation_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +95,15 @@ class ProcessSchema:
     time_unit: str = "h"
     internal_unit_policy: str = "legacy_temexd_mod"
     external_unit_policy: str = "schema documents SI-facing names; kernel values remain legacy TEP values"
+    requested_action_semantics: str = "external request before wrapper saturation"
+    implemented_action_semantics: str = "command after wrapper saturation to [0, 100] %"
+    action_authority_semantics: str = "external in open loop; controller-owned in closed loop"
+    wrapper_rate_limit: bool = False
+    actuator_semantics: str = "valve dynamics and enabled stiction are applied inside the legacy kernel"
+    native_rng_semantics: str = (
+        "native stochastic seed initializes the kernel random stream used by measurement noise and enabled stochastic "
+        "disturbances; default ms_flag=0x0F uses the shared stream, while kernel bit 5 can separate the two RNG states"
+    )
 
     def names(self, role: str) -> list[str]:
         variables = self._variables_for_role(role)
@@ -74,7 +112,7 @@ class ProcessSchema:
     def variable(self, role: str, name: str) -> Variable:
         variables = self._variables_for_role(role)
         for variable in variables:
-            if variable.name == name:
+            if variable.name == name or variable.legacy_symbol == name or name in variable.aliases:
                 return variable
         valid_names = ", ".join(variable.name for variable in variables)
         raise KeyError(f"Unknown {self._canonical_role(role)} variable {name!r}. Valid names: {valid_names}.")
@@ -118,6 +156,137 @@ class ProcessSchema:
         if array.shape != (len(variables),):
             raise ValueError(f"Expected shape ({len(variables)},) for {self._canonical_role(role)}, got {array.shape}.")
         return {variable.name: float(value) for variable, value in zip(variables, array)}
+
+    def to_canonical_dict(self) -> dict[str, Any]:
+        """Return the complete process description as JSON-serializable data."""
+        return asdict(self)
+
+    def validate(self) -> dict[str, Any]:
+        """Audit structural metadata and TEP interface conformance without running the kernel."""
+        checks: dict[str, bool] = {}
+        for role, expected_variable_role in ROLE_VARIABLE_TYPES.items():
+            variables = self._variables_for_role(role)
+            checks[f"{role}.indices"] = [v.index for v in variables] == list(range(len(variables)))
+            checks[f"{role}.names_unique"] = len({v.name for v in variables}) == len(variables)
+            checks[f"{role}.units_present"] = all(bool(v.unit.strip()) for v in variables)
+            checks[f"{role}.roles"] = all(v.role == expected_variable_role for v in variables)
+            checks[f"{role}.bounds"] = all(v.lower is None or v.upper is None or v.lower <= v.upper for v in variables)
+            checks[f"{role}.nominals"] = all(
+                v.nominal is None
+                or (v.lower is None or v.nominal >= v.lower) and (v.upper is None or v.nominal <= v.upper)
+                for v in variables
+            )
+            identifiers = [
+                item
+                for v in variables
+                for item in (v.name, v.legacy_symbol, *v.aliases)
+                if item is not None
+            ]
+            checks[f"{role}.identifiers_unique"] = len(identifiers) == len(set(identifiers))
+
+        if self.name == "modified_tennessee_eastman_process":
+            for role, expected_count in TEP_ROLE_COUNTS.items():
+                checks[f"{role}.count"] = len(self._variables_for_role(role)) == expected_count
+            checks["states.legacy_indices"] = all(v.legacy_index == i for i, v in enumerate(self.states, start=1))
+            checks["states.offline"] = all(not v.available_online for v in self.states)
+            checks["measurements.legacy_ids"] = all(
+                v.legacy_symbol == f"XMEAS({i})" and v.legacy_index == i
+                for i, v in enumerate(self.measurements, start=1)
+            )
+            checks["measurements.online"] = all(v.available_online for v in self.measurements)
+            checks["measurements.continuous_timing"] = all(
+                v.update_mode == "continuous" and v.sample_period_hours is None and v.delay_samples == 0
+                for v in self.measurements[:22]
+            )
+            checks["measurements.gas_analyzer_timing"] = all(
+                v.update_mode == "sample_and_hold" and v.sample_period_hours == 0.1 and v.delay_samples == 1
+                for v in self.measurements[22:36]
+            )
+            checks["measurements.product_analyzer_timing"] = all(
+                v.update_mode == "sample_and_hold" and v.sample_period_hours == 0.25 and v.delay_samples == 1
+                for v in self.measurements[36:41]
+            )
+            checks["measurements.idv15_xmeas22_disambiguated"] = (
+                self.disturbances[14].legacy_symbol == "IDV(15)"
+                and self.disturbances[14].description == "Separator cooling water valve stiction"
+                and self.measurements[21].legacy_symbol == "XMEAS(22)"
+                and self.measurements[21].name == "condenser_cooling_water_outlet_temperature"
+            )
+            checks["additional_measurements.timing"] = all(
+                v.update_mode == "continuous" and v.sample_period_hours is None and v.delay_samples == 0
+                for v in self.additional_measurements[:8]
+            ) and all(
+                v.update_mode == "sample_and_hold" and v.sample_period_hours == 0.1 and v.delay_samples == 1
+                for v in self.additional_measurements[8:]
+            )
+            checks["manipulated_variables.legacy_ids"] = all(
+                v.legacy_symbol == f"XMV({i})" and v.legacy_index == i
+                for i, v in enumerate(self.manipulated_variables, start=1)
+            )
+            checks["manipulated_variables.bounds"] = all(
+                v.lower == 0.0 and v.upper == 100.0 for v in self.manipulated_variables
+            )
+            checks["disturbances.legacy_ids"] = all(
+                v.legacy_symbol == f"IDV({i})" and v.legacy_index == i
+                for i, v in enumerate(self.disturbances, start=1)
+            )
+            checks["disturbances.root_causes"] = {
+                v.legacy_index for v in self.disturbances if v.root_cause_status == "unknown"
+            } == {16, 17, 18, 20}
+            checks["monitors.offline"] = all(
+                not v.available_online
+                for role in ("disturbance_monitors", "process_monitors", "concentration_monitors")
+                for v in self._variables_for_role(role)
+            )
+            checks["action.wrapper_saturation"] = "saturation" in self.implemented_action_semantics
+            checks["action.authority"] = (
+                "open loop" in self.action_authority_semantics and "closed loop" in self.action_authority_semantics
+            )
+            checks["action.no_wrapper_rate_limit"] = self.wrapper_rate_limit is False
+            checks["action.kernel_actuator"] = "inside the legacy kernel" in self.actuator_semantics
+            checks["rng.native_stochastic_scope"] = (
+                "measurement noise" in self.native_rng_semantics and "stochastic disturbances" in self.native_rng_semantics
+            )
+
+        errors = [name for name, passed in checks.items() if not passed]
+        return {"ok": not errors, "checks": checks, "errors": errors}
+
+    def conformance_report(self) -> dict[str, Any]:
+        """Generate reviewer-facing rows from schema metadata rather than a copied table."""
+        rows = []
+        for role in ROLE_VARIABLE_TYPES:
+            for v in self._variables_for_role(role):
+                rows.append({
+                    "role": role,
+                    "name": v.name,
+                    "legacy_symbol": v.legacy_symbol,
+                    "legacy_index": v.legacy_index,
+                    "aliases": list(v.aliases),
+                    "unit": v.unit,
+                    "lower": v.lower,
+                    "upper": v.upper,
+                    "available_online": v.available_online,
+                    "update_mode": v.update_mode,
+                    "sample_period_hours": v.sample_period_hours,
+                    "delay_samples": v.delay_samples,
+                    "root_cause_status": v.root_cause_status,
+                    "perturbation_model": v.perturbation_model,
+                })
+        return {
+            "schema": self.name,
+            "source": "temexd_mod documented interface tables and kernel constants",
+            "validation": self.validate(),
+            "role_counts": {role: len(self._variables_for_role(role)) for role in ROLE_VARIABLE_TYPES},
+            "action_interface": {
+                "requested": self.requested_action_semantics,
+                "implemented": self.implemented_action_semantics,
+                "authority": self.action_authority_semantics,
+                "wrapper_rate_limit": self.wrapper_rate_limit,
+                "actuator": self.actuator_semantics,
+            },
+            "native_rng_semantics": self.native_rng_semantics,
+            "variables": rows,
+        }
 
     def _variables_for_role(self, role: str) -> tuple[Variable, ...]:
         canonical = self._canonical_role(role)
@@ -265,12 +434,15 @@ DISTURBANCE_DESCRIPTIONS = [
     "Random condenser cooling water pressure/flow",
 ]
 
-
-def _variables(items: list[tuple[str, str, str]], role: str, offset: int = 0) -> tuple[Variable, ...]:
-    return tuple(
-        Variable(name=name, unit=unit, role=role, index=i + offset, description=description)
-        for i, (name, unit, description) in enumerate(items)
-    )
+DISTURBANCE_PERTURBATION_MODELS = (
+    ("step",) * 7
+    + ("random",) * 5
+    + ("drift",)
+    + ("stiction",) * 2
+    + ("random",) * 3
+    + ("stiction",)
+    + ("random",) * 9
+)
 
 
 def _measured_compositions() -> tuple[Variable, ...]:
@@ -283,10 +455,15 @@ def _measured_compositions() -> tuple[Variable, ...]:
             description=description,
             legacy_symbol=f"XMEAS({i + 23})",
             legacy_index=i + 23,
+            aliases=(f"XMEAS{i + 23}",),
             stream=stream,
             component=component,
             physical_type="composition",
             measurement_noise="legacy measured analyzer output",
+            sample_period="0.1 h" if i < 14 else "0.25 h",
+            update_mode="sample_and_hold",
+            sample_period_hours=0.1 if i < 14 else 0.25,
+            delay_samples=1,
         )
         for i, (name, stream, component, description) in enumerate(MEASURED_COMPOSITION_DESCRIPTIONS)
     )
@@ -396,10 +573,15 @@ def _additional_measurements() -> tuple[Variable, ...]:
             description=description,
             legacy_symbol=f"XMEASADD({i + 1})",
             legacy_index=i + 42,
+            aliases=(f"XMEASADD{i + 1}",),
             stream=stream,
             component=component,
             physical_type=physical_type,
             measurement_noise="legacy additional measured output",
+            sample_period="continuous" if i < 8 else "0.1 h",
+            update_mode="continuous" if i < 8 else "sample_and_hold",
+            sample_period_hours=None if i < 8 else 0.1,
+            delay_samples=0 if i < 8 else 1,
         )
         for i, (name, unit, description, stream, component, physical_type) in enumerate(ADDITIONAL_MEASUREMENT_DESCRIPTIONS)
     )
@@ -415,6 +597,7 @@ def _disturbance_monitors() -> tuple[Variable, ...]:
             description=description,
             legacy_symbol=f"XMEASDIST({i + 1})",
             legacy_index=i + 1,
+            aliases=(f"XMEASDIST{i + 1}",),
             available_online=False,
             physical_type="disturbance_monitor",
             measurement_noise="noise-free monitor",
@@ -433,6 +616,7 @@ def _process_monitors() -> tuple[Variable, ...]:
             description=description,
             legacy_symbol=f"XMEASMONITOR({i + 1})",
             legacy_index=i + 1,
+            aliases=(f"XMEASMONITOR{i + 1}",),
             available_online=False,
             physical_type="process_monitor",
             measurement_noise="internal monitor",
@@ -469,6 +653,8 @@ def _concentration_monitors() -> tuple[Variable, ...]:
                     description=f"Concentration of {component} in {section_description}",
                     legacy_symbol=f"XMEASCOMP({index + 1})",
                     legacy_index=index + 1,
+                    aliases=(f"XMEASCOMP{index + 1}",),
+                    available_online=False,
                     stream=stream,
                     component=component,
                     physical_type="composition",
@@ -478,9 +664,30 @@ def _concentration_monitors() -> tuple[Variable, ...]:
     return tuple(variables)
 
 
-states = _variables(STATE_DESCRIPTIONS, "state")
+states = tuple(
+    Variable(
+        name=name,
+        unit=unit,
+        role="state",
+        index=i,
+        description=description,
+        legacy_index=i + 1,
+        available_online=False,
+    )
+    for i, (name, unit, description) in enumerate(STATE_DESCRIPTIONS)
+)
 states += tuple(
-    Variable(name=name, unit="%", role="state", index=i + 38, description=description, lower=0.0, upper=100.0)
+    Variable(
+        name=name,
+        unit="%",
+        role="state",
+        index=i + 38,
+        description=description,
+        lower=0.0,
+        upper=100.0,
+        legacy_index=i + 39,
+        available_online=False,
+    )
     for i, (name, description) in enumerate(XMV_DESCRIPTIONS)
 )
 
@@ -488,14 +695,52 @@ TEP_SCHEMA = ProcessSchema(
     name="modified_tennessee_eastman_process",
     states=states,
     manipulated_variables=tuple(
-        Variable(name=name, unit="%", role="manipulated_variable", index=i, description=description, lower=0.0, upper=100.0)
+        Variable(
+            name=name,
+            unit="%",
+            role="manipulated_variable",
+            index=i,
+            description=description,
+            lower=0.0,
+            upper=100.0,
+            legacy_symbol=f"XMV({i + 1})",
+            legacy_index=i + 1,
+            aliases=(f"XMV{i + 1}",),
+        )
         for i, (name, description) in enumerate(XMV_DESCRIPTIONS)
     ),
     disturbances=tuple(
-        Variable(name=f"idv_{i + 1:02d}", unit="activation", role="disturbance", index=i, description=description, lower=0.0, upper=1.0)
+        Variable(
+            name=f"idv_{i + 1:02d}",
+            unit="activation",
+            role="disturbance",
+            index=i,
+            description=description,
+            lower=0.0,
+            upper=1.0,
+            legacy_symbol=f"IDV({i + 1})",
+            legacy_index=i + 1,
+            aliases=(f"IDV{i + 1}",),
+            root_cause_status="unknown" if i in {15, 16, 17, 19} else "specified",
+            perturbation_model=DISTURBANCE_PERTURBATION_MODELS[i],
+        )
         for i, description in enumerate(DISTURBANCE_DESCRIPTIONS)
     ),
-    measurements=_variables(MEASUREMENT_DESCRIPTIONS, "measurement") + _measured_compositions(),
+    measurements=tuple(
+        Variable(
+            name=name,
+            unit=unit,
+            role="measurement",
+            index=i,
+            description=description,
+            legacy_symbol=f"XMEAS({i + 1})",
+            legacy_index=i + 1,
+            aliases=(f"XMEAS{i + 1}",),
+            measurement_noise="legacy continuous measured output",
+            sample_period="continuous",
+        )
+        for i, (name, unit, description) in enumerate(MEASUREMENT_DESCRIPTIONS)
+    ) + _measured_compositions(),
     additional_measurements=_additional_measurements(),
     disturbance_monitors=_disturbance_monitors(),
     process_monitors=_process_monitors(),

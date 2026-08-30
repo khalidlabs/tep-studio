@@ -77,7 +77,8 @@ class ClosedLoopSimulation:
         """Run the closed loop to ``horizon`` and return a :class:`ClosedLoopResult`.
 
         Args:
-            seed: measurement-noise seed for a reproducible run.
+            seed: native stochastic seed for reproducible measurement noise and
+                enabled stochastic disturbances.
             initial_state: optional full 50-element start state (overrides the mode default).
             disturbances: a constant 28-element IDV vector applied for the whole run.
             disturbance_schedule: ``time(h) -> 28-element IDV vector`` for timed/latched
